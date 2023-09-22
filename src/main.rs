@@ -1,4 +1,4 @@
-/* This is a cli tool that creates a new leetcode 
+/* This is a cli tool that creates a new leetcode
  * entry within the `<...>/leetcode repo`.
  *
  * This tool is designed for my own personal use and not really intended for distribution.
@@ -10,7 +10,6 @@
  * information about my submissions, but that is after building this first.
  */
 
-
 /* Todo:
  * create usage with ./lc (or really lc when its done)
  * should be 3 modes of operation:
@@ -19,26 +18,32 @@
  *  3: <Later> a link to the problem that it fills in from
  */
 
+mod args;
+
+use anyhow::Result;
 use clap::Parser;
+use std::io::Write;
 
-/// Simple program to greet a person
-#[derive(Parser, Debug)]
-#[command(author, version, about, long_about = None)]
-struct Args {
-    /// Name of the person to greet
-    #[arg(short, long, default_value = "")]
-    name: String,
-
-    /// Number of times to greet
-    #[arg(short, long, default_value_t = 1)]
-    count: u8,
-}
-
-fn main() {
-    let args = Args::parse();
-
-    for _ in 0..args.count {
-        println!("Hello {}", args.name);
-
+fn main() -> Result<()> {
+    let args = args::Args::parse();
+    if args.args().any(|a| a != None) {
+        // if any of the args are Some(_) then automatically start the
+        // non-guided setup
+        // check which are set from flags
+        println!("You included these:");
+        for each in args.args() {
+            if let Some(val) = each {
+                println!("{val}");
+            }
+        }
+    } else {
+        // this means that the interactive shall be set
+        println!("Interactive Mode!");
+        print!("Write your name: ");
+        std::io::stdout().flush()?;
+        let mut buf = String::from("");
+        std::io::stdin().read_line(&mut buf)?;
+        println!("Hello {}", buf.trim());
     }
+    Ok(())
 }
