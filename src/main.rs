@@ -23,17 +23,23 @@ mod args;
 use anyhow::Result;
 use clap::Parser;
 use std::io::Write;
+use struct_iterable::Iterable;
 
 fn main() -> Result<()> {
     let args = args::Args::parse();
-    if args.args().any(|a| a != None) {
-        // if any of the args are Some(_) then automatically start the
-        // non-guided setup
-        // check which are set from flags
+    // if any of the args are Some(_) then automatically start the
+    // non-guided setup
+    if args
+        .iter()
+        .any(|(_name, val)| match val.downcast_ref::<Option<String>>() {
+            Some(Some(_)) => true,
+            _ => false,
+        })
+    {
         println!("You included these:");
-        for each in args.args() {
-            if let Some(val) = each {
-                println!("{val}");
+        for (name, val) in args.iter() {
+            if let Some(Some(val)) = val.downcast_ref::<Option<String>>() {
+                println!("{}: {}", name, val);
             }
         }
     } else {
