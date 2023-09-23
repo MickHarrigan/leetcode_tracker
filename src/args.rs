@@ -34,22 +34,3 @@ pub struct Args {
     #[arg(short, long, default_value = None)]
     extra: Option<String>,
 }
-
-// impl Args {
-//     pub fn args(&self) -> impl Iterator<Item = Option<String>> {
-//         // fields will be replaced with values!().into_iter()
-//         // let fields = vec![
-//         //     self.link.clone(),
-//         //     self.number.clone(),
-//         //     self.func_name.clone(),
-//         //     self.prob_name.clone(),
-//         //     self.args_func.clone(),
-//         //     self.ret_func.clone(),
-//         //     self.extra.clone(),
-//         // ];
-//         // fields.into_iter()
-//     }
-
-//     // Returns the names of the fields in whatever order
-//     // pub fn fields(&self) -> impl Iterator<Item = String> {}
-// }
