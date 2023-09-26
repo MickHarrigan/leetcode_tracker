@@ -4,7 +4,7 @@ use clap::{Parser, Subcommand, ValueEnum};
 #[command(propagate_version = true)]
 #[cfg(not(feature = "test"))]
 /// CLI tool to create and manage LeetCode problems
-pub struct Args {
+pub struct Cli {
     #[command(subcommand)]
     pub command: Commands,
 }
