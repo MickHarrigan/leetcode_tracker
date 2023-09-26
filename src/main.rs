@@ -1,27 +1,5 @@
-/* This is a cli tool that creates a new leetcode
- * entry within the `<...>/leetcode repo`.
- *
- * This tool is designed for my own personal use and not really intended for distribution.
- *
- * The goal with this is to make a real cli tool and to cargo install it so
- * I can just use it each day that I make a new LC solution.
- *
- * The longer term goal is to have a way to make this fetch my solutions and
- * information about my submissions, but that is after building this first.
- */
-
-/* Todo:
- * create usage with ./lc (or really lc when its done)
- * should be 3 modes of operation:
- *  1: without args then run through questions to fill in the necessary data
- *  2: with args that fill in the data
- *  3: <Later> a link to the problem that it fills in from
- */
-
-mod args;
-mod io;
-
-use crate::args::*;
+mod commands;
+use commands::{common::*, finish::*, hide::*, info::*, new::*, search::*, submit::*, tag::*};
 
 use anyhow::Result;
 use clap::Parser;
@@ -68,7 +46,9 @@ async fn main() -> Result<()> {
                     // output["data"]["question"]["codeSnippets"][15]["code"] == code that is
                     // provided
                     // "query":"\n    query questionEditorData($titleSlug: String!) {\n  question(titleSlug: $titleSlug) {\n    questionId\n    questionFrontendId\n    codeSnippets {\n      lang\n      langSlug\n      code\n    }\n    envInfo\n    enableRunCode\n    hasFrontendPreview\n    frontendPreviews\n  }\n}\n    ","variables":{"titleSlug":"two-sum"},"operationName":"questionEditorData"
-                "lang":"rust","question_id":"1","typed_code":"impl Solution {\n    pub fn two_sum(nums: Vec<i32>, target: i32) -> Vec<i32> {\n        use std::collections::HashMap;\n        // hash each number with the index as their value\n        let mut hash: HashMap<i32, i32> = HashMap::new();\n        for (k, v) in nums.iter().zip(0..) {\n            match hash.get(&(target - k)) {\n                Some(i) => return vec![v, *i],\n                None => hash.insert(*k, v),\n            };\n        }\n        vec![]\n    }\n}"
+                    //
+                    // submissions work
+                    "lang":"rust","question_id":"1","typed_code":"impl Solution {\n    pub fn two_sum(nums: Vec<i32>, target: i32) -> Vec<i32> {\n        use std::collections::HashMap;\n        // hash each number with the index as their value\n        let mut hash: HashMap<i32, i32> = HashMap::new();\n        for (k, v) in nums.iter().zip(0..) {\n            match hash.get(&(target - k)) {\n                Some(i) => return vec![v, *i],\n                None => hash.insert(*k, v),\n            };\n        }\n        vec![]\n    }\n}"
                 }))
                 .send()
                 .await?
@@ -79,8 +59,20 @@ async fn main() -> Result<()> {
 
         Commands::Tag { cmd } => match cmd {
             TagCommand::Add => {
+                // FLAGS
+                // ************************************************************
                 // Add should take a number and a tag/[tags]
                 // to apply to a problem referenced by the number provided
+                //
+                // PROMPTS
+                // ************************************************************
+                // should prompt for a tag and a problem number
+                let (_input_tag, tag) =
+                    prompt_for_input::<TagType>("Enter Tag to add: ".to_string())?;
+
+                let (_input_num, num) =
+                    prompt_for_input::<usize>("Enter Problem Number to add Tag to: ".to_string())?;
+                println!("Tag: {tag:?} was added to Problem: {num}");
             }
             TagCommand::Remove => {
                 // should tame a number and a tag/[tags] to remove the tags from said problem
@@ -93,22 +85,22 @@ async fn main() -> Result<()> {
                 // given a tag, finds all problems that have that tag
             }
         },
-        Commands::Info => {
+        Commands::Info { num } => {
             // takes a number and prints a bunch of info about the problem
         }
-        Commands::Search => {
+        Commands::Search { cmd } => {
             // given any of (name, number, tag(s)) will find what you are searching for
         }
-        Commands::Hide => {
+        Commands::Hide { num } => {
             // given a number will tag this as a hidden problem that has been attempted but not
             // completed. This should maybe be pushed somewhere else or just not tracked.
         }
-        Commands::Submit => {
+        Commands::Submit { num } => {
             // given a number should aim to send the code to LeetCode, but I have no idea on how
             // to actually send this to them and receive the response. HTTP? GraphQL? I have no
             // clue.
         }
-        Commands::Finish => {
+        Commands::Finish { num } => {
             // Ceremoniously tags the problem as completed and with whichever solution was used.
             // Maybe this can track multiple solutions as well to be able to compare them.
             //

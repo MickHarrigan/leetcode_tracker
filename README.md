@@ -62,6 +62,10 @@ $ lc tag
 ```
 Using `tag` has a question pop up about what to do with tags either add, remove, edit, or search for tags.
 
+#### Usage
+The goal is to make no subcommands deeper than `tag add` or similar. This should be handled by
+either the prompts after running this command, or a set of flags for more depth.
+
 ### Submitting a Problem
 This utility allows the user to submit the problem as a response and see output.
 
