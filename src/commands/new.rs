@@ -1,4 +1,4 @@
-use std::{io::Write, str::FromStr};
+use std::{io::Write, mem::forget, str::FromStr};
 
 use super::common::{GQL_ENDPOINT, SESSION, TOKEN};
 use anyhow::{anyhow, Result};
@@ -238,11 +238,22 @@ pub fn create_entry(prob: Problem) -> Result<()> {
     // this should do all of the OS things like making a directory and editing files
     // reference the old bash script for this
     //
-    // first check if the problem exists already in the Cargo.toml
     use std::env;
     let key = "LEETCODE_DIR";
     // val is the top level directory for the leetcode directory
     let lc_dir = env::var(key)?;
+
+    // first check if the problem exists already in the Cargo.toml
+    let cargo = std::fs::read_to_string(format!("{}{}", lc_dir, "/Cargo.toml"))?;
+    let re = Regex::new(format!(r#"\[\[bin\]\]\nname = \"{}\""#, prob.number).as_str()).unwrap();
+    if let Some(_a) = re.captures(cargo.as_str()) {
+        return Err(anyhow::Error::msg(format!(
+            "Problem already exists in repo! e: {}",
+            prob.number
+        )));
+    }
+
+    // then get the function name
 
     let re = Regex::new(r"impl Solution.*\n\s+pub\sfn\s(?<func>\w+)\s*\(").unwrap();
     let func = match re.captures(prob.snippet.as_str()) {
@@ -255,6 +266,7 @@ pub fn create_entry(prob: Problem) -> Result<()> {
         }
     };
 
+    // then set up the main function to be added in
     let main = format!(
         "\n\nfn main() {{
     let sol = Solution::{}();
@@ -270,7 +282,7 @@ pub fn create_entry(prob: Problem) -> Result<()> {
 
     // then make the prob.number directory in src
     std::fs::create_dir_all(format!("{}{}{}{}", lc_dir, "src/", prob.number, "/src/"))?;
-    // then make its TAGS, src/main.rs with snippet inside (plus a main function)
+    // then make its write the code in main.rs
     std::fs::write(
         format!("{}{}{}{}", lc_dir, "src/", prob.number, "/src/main.rs"),
         code,
