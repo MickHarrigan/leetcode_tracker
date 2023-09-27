@@ -1,5 +1,8 @@
 mod commands;
-use commands::{common::*, finish::*, hide::*, info::*, new::*, search::*, submit::*, tag::*};
+use commands::{
+    common::*, edit::*, finish::*, hide::*, info::*, interpret::*, new::*, search::*, submit::*,
+    tag::*,
+};
 
 use anyhow::Result;
 use clap::Parser;
@@ -16,6 +19,7 @@ async fn main() -> Result<()> {
         Commands::Edit { num } => {
             // takes a number then allows the user to edit the solution
             // this is the mutating version of Commands::Info.
+            let _ = commands::edit::run(num);
         }
 
         Commands::Tag { cmd } => match cmd {

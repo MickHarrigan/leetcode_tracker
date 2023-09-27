@@ -1,7 +1,7 @@
-use std::str::FromStr;
+use std::{io::Write, str::FromStr};
 
 use super::common::{GQL_ENDPOINT, SESSION, TOKEN};
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use regex::Regex;
 use reqwest::Url;
 use serde::{Deserialize, Serialize};
@@ -15,7 +15,6 @@ pub async fn run(link: &String) -> Result<()> {
 
     // this goes inside of the query that is sent
     let title_slug = get_title_slug(&link)?;
-    println!("title-slug: {title_slug}");
 
     // with the title-slug I can now query the GQL endpoint for information like the
     // question title, question number, code snippets, etc.
@@ -26,12 +25,15 @@ pub async fn run(link: &String) -> Result<()> {
     // question title
     // code snippets
     // and a capability to add more
-    let query = serde_json::json!("");
+
+    let query = serde_json::json!({"query":"\n    query questionEditorData($titleSlug: String!) {\n  question(titleSlug: $titleSlug) {\n    questionId\n    questionFrontendId\n    title\n    codeSnippets {\n      lang\n      langSlug\n      code\n    }\n    envInfo\n    enableRunCode\n    hasFrontendPreview\n    frontendPreviews\n  }\n}\n    ","variables":{"titleSlug":title_slug},"operationName":"questionEditorData"});
     let data = query_endpoint(&GQL_ENDPOINT.to_string(), &query, &client).await?;
 
     // parse the data into a single struct that can be converted to json and stored in the
     // repo itself
-    let problem_data = parse_from_json_to_problem(&data)?;
+    let mut problem_data = parse_from_json_to_problem(data)?;
+    // link is not set yet
+    problem_data.link = link.to_string();
 
     // create the directory things inside the repo from problem data
     match create_entry(problem_data) {
@@ -48,13 +50,14 @@ pub async fn run(link: &String) -> Result<()> {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct Problem {
     number: usize,
     // is Some(a) when it DOES NOT match number
-    number_frontend: Option<usize>,
+    number_backend: Option<usize>,
     snippet: String,
     title: String,
+    link: String,
 }
 
 pub fn sanitize_lc_link(link: &String) -> Result<Url> {
@@ -155,13 +158,132 @@ pub fn generate_request_client(sanitized_link: &Url) -> Result<reqwest::Client> 
         .map_err(|e| anyhow::Error::msg(e.to_string()))
 }
 
-pub fn parse_from_json_to_problem(json: &serde_json::Value) -> Result<Problem> {
-    todo!();
-    // parse the json into the required data inside problem
+pub fn parse_from_json_to_problem(json: serde_json::Value) -> Result<Problem> {
+    // data should contain specifically
+    // question number
+    // question title
+    // code snippets
+    // and a capability to add more
+    let question = &json["data"]["question"];
+    let number = match question["questionFrontendId"].as_str() {
+        Some(a) => match a.parse::<usize>() {
+            Ok(a) => a,
+            Err(e) => return Err(e.into()),
+        },
+        None => {
+            return Err(anyhow::Error::msg(
+                "Could not get the questionFrontendId from JSON",
+            ))
+        }
+    };
+    // if backend number != frontend number then backend number = Some(backend)
+    // otherwise its None
+    let number_backend = match question["questionId"].as_str() {
+        Some(a) => match a.parse::<usize>() {
+            Ok(a) if a == number => None,
+            Ok(a) => Some(a),
+            Err(e) => return Err(e.into()),
+        },
+        None => return Err(anyhow::Error::msg("Could not get the questionId from JSON")),
+    };
+    let len = match question["codeSnippets"].as_array() {
+        Some(a) => a.len(),
+        None => {
+            return Err(anyhow::Error::msg(
+                "Could not get the codeSnippets array from JSON",
+            ))
+        }
+    };
+    let mut snippet: String = "".to_string();
+    for i in 0..len {
+        match question["codeSnippets"][i]["langSlug"].as_str() {
+            Some(a) => {
+                if a == "rust" {
+                    match question["codeSnippets"][i]["code"].as_str() {
+                        Some(a) => snippet = a.to_string(),
+                        None => {
+                            return Err(anyhow::Error::msg(
+                                "Could not get the codeSnippet from JSON",
+                            ))
+                        }
+                    }
+                }
+            }
+            None => {
+                return Err(anyhow::Error::msg(
+                    "Could not get the codeSnippet from JSON",
+                ))
+            }
+        }
+    }
+    if snippet == "".to_string() {
+        return Err(anyhow::Error::msg(
+            "Could not get the codeSnippet from JSON",
+        ));
+    }
+    let title = match question["title"].as_str() {
+        Some(a) => a.to_string(),
+        None => return Err(anyhow::Error::msg("Could not get the title from JSON")),
+    };
+    Ok(Problem {
+        number,
+        number_backend,
+        snippet,
+        title,
+        link: "".to_owned(),
+    })
 }
 
 pub fn create_entry(prob: Problem) -> Result<()> {
     // this should do all of the OS things like making a directory and editing files
     // reference the old bash script for this
-    todo!();
+    //
+    // first check if the problem exists already in the Cargo.toml
+    use std::env;
+    let key = "LEETCODE_DIR";
+    // val is the top level directory for the leetcode directory
+    let lc_dir = env::var(key)?;
+
+    let re = Regex::new(r"impl Solution.*\n\s+pub\sfn\s(?<func>\w+)\s*\(").unwrap();
+    let func = match re.captures(prob.snippet.as_str()) {
+        Some(caps) => caps["func"].to_owned(),
+        None => {
+            return Err(anyhow::Error::msg(format!(
+                "Could not find function name: {}",
+                prob.snippet
+            )))
+        }
+    };
+
+    let main = format!(
+        "\n\nfn main() {{
+    let sol = Solution::{}();
+    println!(\"{{:?}}\", sol);\n}}",
+        func
+    );
+
+    let code = format!("{}{}", prob.snippet, main);
+    let readme = format!(
+        "# {}. {}\n\n[Here]({}) is the link to the problem.",
+        prob.number, prob.title, prob.link
+    );
+
+    // then make the prob.number directory in src
+    std::fs::create_dir_all(format!("{}{}{}{}", lc_dir, "src/", prob.number, "/src/"))?;
+    // then make its TAGS, src/main.rs with snippet inside (plus a main function)
+    std::fs::write(
+        format!("{}{}{}{}", lc_dir, "src/", prob.number, "/src/main.rs"),
+        code,
+    )?;
+    // README.md
+    std::fs::write(
+        format!("{}{}{}{}", lc_dir, "src/", prob.number, "/README.md"),
+        readme,
+    )?;
+    // TAGS
+    std::fs::write(
+        format!("{}{}{}{}", lc_dir, "src/", prob.number, "/TAGS"),
+        "",
+    )?;
+    Ok(())
 }
