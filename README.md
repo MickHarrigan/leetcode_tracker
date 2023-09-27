@@ -35,17 +35,12 @@ The model that the problems should have is
 ## Usage Examples
 
 ### New Problem
-Create a new problem with the interactive startup
+Create a new problem with a provided link.
 ```bash
-$ lc new
-```
-or use flags to specify information right to the exe
-```bash
-$ lc new -l <link> -p [problem number] -n [problem name] -f [function name] -a [function arguments] -r [function return] -e [extra code needed]
+$ lc new <link>
 ```
 
-Overall the preferred way to do this is with just `lc new` and inputting either the information that way, or just using a link that the information can be obtained from
-in the first place.
+Read the title-slug and then request data from the server to then build the directory structure
 
 ### Inspecting a Problem
 This allows the user to look at the problem and see information about it.

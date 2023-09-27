@@ -1,5 +1,5 @@
-pub mod finish;
 pub mod common;
+pub mod finish;
 pub mod hide;
 pub mod info;
 pub mod new;
