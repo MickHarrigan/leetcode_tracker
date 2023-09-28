@@ -1,7 +1,7 @@
-use std::{io::Write, mem::forget, str::FromStr};
+use std::{io::Write, str::FromStr};
 
 use super::common::{GQL_ENDPOINT, SESSION, TOKEN};
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use regex::Regex;
 use reqwest::Url;
 use serde::{Deserialize, Serialize};
@@ -10,7 +10,6 @@ const LEETCODE_HOST: &str = "leetcode.com";
 
 pub async fn run(link: &String) -> Result<()> {
     let link = sanitize_lc_link(link)?;
-    println!("New command with link: {}", link);
     let client = generate_request_client(&link)?;
 
     // this goes inside of the query that is sent
@@ -244,13 +243,25 @@ pub fn create_entry(prob: Problem) -> Result<()> {
     let lc_dir = env::var(key)?;
 
     // first check if the problem exists already in the Cargo.toml
-    let cargo = std::fs::read_to_string(format!("{}{}", lc_dir, "/Cargo.toml"))?;
+    let cargo_path = format!("{}{}", lc_dir, "/Cargo.toml");
+    let cargo = std::fs::read_to_string(cargo_path.clone())?;
     let re = Regex::new(format!(r#"\[\[bin\]\]\nname = \"{}\""#, prob.number).as_str()).unwrap();
     if let Some(_a) = re.captures(cargo.as_str()) {
         return Err(anyhow::Error::msg(format!(
             "Problem already exists in repo! e: {}",
             prob.number
         )));
+    } else {
+        // write the bin into Cargo.toml
+        let mut file = std::fs::OpenOptions::new().append(true).open(cargo_path)?;
+        writeln!(
+            file,
+            "{}",
+            format!(
+                "\n[[bin]]\nname = \"{}\"\npath = \"src/{}/src/main.rs\"",
+                prob.number, prob.number
+            )
+        )?;
     }
 
     // then get the function name
@@ -274,7 +285,7 @@ pub fn create_entry(prob: Problem) -> Result<()> {
         func
     );
 
-    let code = format!("{}{}", prob.snippet, main);
+    let code = format!("{}{}{}", "struct Solution;\n\n", prob.snippet, main);
     let readme = format!(
         "# {}. {}\n\n[Here]({}) is the link to the problem.",
         prob.number, prob.title, prob.link
