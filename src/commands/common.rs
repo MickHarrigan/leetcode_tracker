@@ -66,3 +66,10 @@ where
     println!("Input was parsed from: {} into {:?}", input, output);
     Ok((input, output))
 }
+
+pub fn get_lc_dir() -> Result<String> {
+    use std::env;
+    let key = "LEETCODE_DIR";
+    // val is the top level directory for the leetcode directory
+    env::var(key).map_err(|e| e.into())
+}

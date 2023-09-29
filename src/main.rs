@@ -12,54 +12,17 @@ async fn main() -> Result<()> {
     let args = Cli::parse();
     match &args.command {
         Commands::New { link } => {
-            let _ = commands::new::run(link).await; // <--- Remove this ; later as it should return all the way up to
-                                                    // main
+            commands::new::run(link).await? // <--- Remove this ; later as it should return all the way up to
+                                            // main
         }
 
         Commands::Edit { num } => {
             // takes a number then allows the user to edit the solution
             // this is the mutating version of Commands::Info.
-            let _ = commands::edit::run(num);
+            commands::edit::run(num)?
         }
 
-        Commands::Tag { cmd } => match cmd {
-            TagCommand::Add => {
-                // FLAGS
-                // ************************************************************
-                // Add should take a number and a tag/[tags]
-                // to apply to a problem referenced by the number provided
-                //
-                // PROMPTS
-                // ************************************************************
-                // should prompt for a tag and a problem number
-                let (_input_tag, tag) = prompt_for_input::<TagType>("Enter Tag to add: ")?;
-
-                let (_input_num, num) =
-                    prompt_for_input::<usize>("Enter Problem Number to add Tag to: ")?;
-                println!("Tag: {tag:?} was added to Problem: {num}");
-            }
-            TagCommand::Remove => {
-                // FLAGS
-                // ************************************************************
-                // should take a number and a tag/[tags] to remove the tags from said problem
-                //
-                // PROMPTS
-                // ************************************************************
-                // should prompt for a tag and a problem number
-                let (_input_tag, tag) = prompt_for_input::<TagType>("Enter Tag to add: ")?;
-
-                let (_input_num, num) =
-                    prompt_for_input::<usize>("Enter Problem Number to remove Tag from: ")?;
-                println!("Tag: {tag:?} was removed from Problem: {num}");
-            }
-            TagCommand::Edit => {
-                // should just take a number and then give a list of all tags for that problem that
-                // the user can adjust
-            }
-            TagCommand::Search => {
-                // given a tag, finds all problems that have that tag
-            }
-        },
+        Commands::Tag { cmd } => tag_subcommands(cmd)?,
         Commands::Info { num } => {
             // takes a number and prints a bunch of info about the problem
         }

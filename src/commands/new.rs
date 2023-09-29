@@ -1,6 +1,7 @@
 use std::{io::Write, str::FromStr};
 
-use super::common::{GQL_ENDPOINT, SESSION, TOKEN};
+
+use super::common::{GQL_ENDPOINT, SESSION, TOKEN, get_lc_dir};
 use anyhow::Result;
 use regex::Regex;
 use reqwest::Url;
@@ -234,13 +235,7 @@ pub fn parse_from_json_to_problem(json: serde_json::Value) -> Result<Problem> {
 }
 
 pub fn create_entry(prob: Problem) -> Result<()> {
-    // this should do all of the OS things like making a directory and editing files
-    // reference the old bash script for this
-    //
-    use std::env;
-    let key = "LEETCODE_DIR";
-    // val is the top level directory for the leetcode directory
-    let lc_dir = env::var(key)?;
+    let lc_dir = get_lc_dir()?;
 
     // first check if the problem exists already in the Cargo.toml
     let cargo_path = format!("{}{}", lc_dir, "/Cargo.toml");
