@@ -569,7 +569,54 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e2abad23fbc42b3700f2f279844dc832adb2b2eb069b2df918f455c4e18cc646"
 
 [[package]]
-name = "leetcode_entry"
+name = "lc_cli"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "lc_lib",
+ "rayon",
+ "regex",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "strum",
+ "tokio",
+]
+
+[[package]]
+name = "lc_lib"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "rayon",
+ "regex",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "strum",
+ "tokio",
+]
+
+[[package]]
+name = "lc_tui"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "lc_lib",
+ "rayon",
+ "regex",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "strum",
+ "tokio",
+]
+
+[[package]]
+name = "leetcode_tracker"
 version = "0.1.0"
 dependencies = [
  "anyhow",
