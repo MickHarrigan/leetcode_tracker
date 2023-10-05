@@ -1,44 +1,13 @@
-# LeetCode CLI Tool
+# LeetCode interactive library and tooling
 
-## Usage Examples
+This is a set of a library for interacting with [LeetCode](https://leetcode.com/) through the `lc_lib` crate.
 
-### New Problem
-Create a new problem with the interactive startup
-```bash
-$ lc new
-```
-or use flags to specify information right to the exe
-```bash
-$ lc new -l <link> -p [problem number] -n [problem name] -f [function name] -a [function arguments] -r [function return] -e [extra code needed]
-```
+This provides bindings that `lc_cli` and `lc_tui` then use to allow a user to interact with LeetCode in a few different ways.
 
-Overall the preferred way to do this is with just `lc new` and inputting either the information that way, or just using a link that the information can be obtained from
-in the first place.
+## CLI
+This is the primary way to interact with the library.
+This gives a way to use a simple CLI interface to get questions, solve them, and then submit them from the terminal.
 
-### Inspecting a Problem
-This allows the user to look at the problem and see information about it.
-The problem must be one that is already attempted (for now) so that it can show the tags and relevant
-user added data.
-
-In the future this may be something that allows the user to look for and read about a problem in the first place.
-
-### Tagging a Problem
-This allows the users to attribute tags to a question for easier lookup and distinction of what each problem teaches.
-
-```bash
-$ lc tag
-```
-Using `tag` has a question pop up about what to do with tags either add, remove, edit, or search for tags.
-
-### Submitting a Problem
-This utility allows the user to submit the problem as a response and see output.
-
-### Finishing a Problem
-This will tag a problem internally as completed and as such will have its `main.rs` used as the solution.
-
-### Removing a Problem
-This will remove the problem from the listings and remove its finish status if it has it.
-
-### Failing (Hiding) a Problem
-This is for the case that a problem has been attempted but given up on temporarily.
-Tagged with failed or deferred.
+## TUI
+This is the secondary way to interact with the library.
+This gives a front end within a terminal that mimics a GUI and gives a more interactive approach to solving and reading about the problems that LeetCode has to solve.
