@@ -33,6 +33,9 @@ async fn main() -> Result<()> {
             // given a number will tag this as a hidden problem that has been attempted but not
             // completed. This should maybe be pushed somewhere else or just not tracked.
         }
+        Commands::Test { num } => {
+            // same as submit but with the altered state of running the tests that LC provides
+        }
         Commands::Submit { num } => {
             // given a number should aim to send the code to LeetCode, but I have no idea on how
             // to actually send this to them and receive the response. HTTP? GraphQL? I have no

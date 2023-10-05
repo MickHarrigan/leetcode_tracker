@@ -44,6 +44,9 @@ pub enum Commands {
     /// Search for a problem based on name, tags, or number
     #[command(arg_required_else_help = true)]
     Search { cmd: SearchCommand },
+    /// Run the LeetCode provided tests for the provided problem
+    #[command(arg_required_else_help = true)]
+    Test { num: usize },
     /// Send a solution to be submitted
     #[command(arg_required_else_help = true)]
     Submit { num: usize },
@@ -63,7 +66,7 @@ where
     std::io::stdin().read_line(&mut input)?;
     let input = input.trim().to_string();
     let output = input.parse::<T>()?;
-    println!("Input was parsed from: {} into {:?}", input, output);
+    // println!("Input was parsed from: {} into {:?}", input, output);
     Ok((input, output))
 }
 
