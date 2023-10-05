@@ -1,5 +1,4 @@
-mod commands;
-use commands::{
+use lc_lib::{
     common::*, edit::*, finish::*, hide::*, info::*, interpret::*, new::*, search::*, submit::*,
     tag::*,
 };
@@ -13,9 +12,9 @@ async fn main() -> Result<()> {
     match &args.command {
         /**********************************************************************/
         // These are the commands that are most necessary
-        Commands::New { link } => commands::new::run(link).await?,
+        Commands::New { link } => lc_lib::new::run(link).await?,
 
-        Commands::Edit { num } => commands::edit::run(num)?,
+        Commands::Edit { num } => lc_lib::edit::run(num)?,
 
         Commands::Tag { cmd } => tag_subcommands(cmd)?,
 
