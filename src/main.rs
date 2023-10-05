@@ -11,28 +11,14 @@ use clap::Parser;
 async fn main() -> Result<()> {
     let args = Cli::parse();
     match &args.command {
-        Commands::New { link } => {
-            commands::new::run(link).await? // <--- Remove this ; later as it should return all the way up to
-                                            // main
-        }
+        /**********************************************************************/
+        // These are the commands that are most necessary
+        Commands::New { link } => commands::new::run(link).await?,
 
-        Commands::Edit { num } => {
-            // takes a number then allows the user to edit the solution
-            // this is the mutating version of Commands::Info.
-            commands::edit::run(num)?
-        }
+        Commands::Edit { num } => commands::edit::run(num)?,
 
         Commands::Tag { cmd } => tag_subcommands(cmd)?,
-        Commands::Info { num } => {
-            // takes a number and prints a bunch of info about the problem
-        }
-        Commands::Search { cmd } => {
-            // given any of (name, number, tag(s)) will find what you are searching for
-        }
-        Commands::Hide { num } => {
-            // given a number will tag this as a hidden problem that has been attempted but not
-            // completed. This should maybe be pushed somewhere else or just not tracked.
-        }
+
         Commands::Test { num } => {
             // same as submit but with the altered state of running the tests that LC provides
         }
@@ -40,6 +26,18 @@ async fn main() -> Result<()> {
             // given a number should aim to send the code to LeetCode, but I have no idea on how
             // to actually send this to them and receive the response. HTTP? GraphQL? I have no
             // clue.
+        }
+        /**********************************************************************/
+        // these are the commands that can be remade for other uses
+        Commands::Search { cmd } => {
+            // given any of (name, number, tag(s)) will find what you are searching for
+        }
+        Commands::Info { num } => {
+            // takes a number and prints a bunch of info about the problem
+        }
+        Commands::Hide { num } => {
+            // given a number will tag this as a hidden problem that has been attempted but not
+            // completed. This should maybe be pushed somewhere else or just not tracked.
         }
         Commands::Finish { num } => {
             // Ceremoniously tags the problem as completed and with whichever solution was used.
