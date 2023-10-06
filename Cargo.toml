@@ -1,36 +1,14 @@
-[package]
-name = "leetcode_tracker"
-version = "0.1.0"
-edition = "2021"
-default-run = "lc_cli"
-
+# Virtual workspace for all the members to rely on
+# This allows me to have a single place for common crates to be included
 [workspace]
 members = ["lc_lib", "lc_cli", "lc_tui"]
+resolver = "2"
 
-[lib]
-name = "lc_lib"
-path = "lc_lib/src/lib.rs"
-
-[[bin]]
-name = "lc_cli"
-path = "lc_cli/src/main.rs"
-
-[[bin]]
-name = "lc_tui"
-path = "lc_tui/src/main.rs"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-[features]
-default = []
-test = []
-
-[dependencies]
+[workspace.dependencies]
 anyhow = "1.0.75"
-clap = { version = "4.4.4", features = ["derive"] }
-rayon = "1.8.0"
-regex = "1.9.5"
-reqwest = { version = "0.11.20", features = ["json", "cookies"] }
 serde = { version = "1.0.188", features = ["serde_derive", "derive"] }
 serde_json = "1.0.107"
 strum = { version = "0.25.0", features = ["derive"] }
 tokio = { version = "1.32.0", features = ["full"] }
+regex = "1.9.5"
+reqwest = { version = "0.11.20", features = ["json", "cookies"] }
