@@ -25,7 +25,7 @@ pub struct StatefulList<T> {
 impl<T> StatefulList<T> {
     fn with_items(items: Vec<T>) -> StatefulList<T> {
         StatefulList {
-            state: ListState::default(),
+            state: ListState::default().with_selected(Some(0)),
             items,
         }
     }
@@ -58,9 +58,9 @@ impl<T> StatefulList<T> {
         self.state.select(Some(i));
     }
 
-    fn unselect(&mut self) {
-        self.state.select(None);
-    }
+    // fn unselect(&mut self) {
+    //     self.state.select(None);
+    // }
 }
 
 pub struct App {
@@ -72,10 +72,6 @@ pub struct App {
 
 fn parse_problems(json: serde_json::Value, count: usize) -> Vec<Result<LeetCodeProblem>> {
     let list = &json["data"]["problemsetQuestionList"];
-    // let count = &json["data"]["problemsetQuestionList"]["questions"]
-    //     .as_array()
-    //     .unwrap()
-    //     .len();
     let mut out = Vec::with_capacity(count);
     for i in 0..count {
         out.push(
@@ -99,18 +95,17 @@ impl App {
         let link = Url::from_str("https://leetcode.com/problems/all").unwrap();
         let client = generate_request_client(&link).unwrap();
         let handle = rt.spawn(query_endpoint(GQL_ENDPOINT.to_string(), query, client));
-        // let data = query_endpoint(&GQL_ENDPOINT.to_string(), &query, &client).await?;
 
         // HERE: is where the cache checking could happen
 
         let data = rt.block_on(handle).unwrap().unwrap();
 
         // parse the data into a vec![LeetCodeProblem]
+        // 50 is the amount of problems to read in at one time
         let problems = parse_problems(data, 50)
             .into_iter()
             .filter_map(Result::ok)
             .collect();
-        // return the App { problems: vec![LeetCodeProblem] }
 
         App {
             problems: StatefulList::with_items(problems),
@@ -127,7 +122,7 @@ impl App {
             .unwrap();
         let mut app = App::new(rt);
         let mut last_tick = Instant::now();
-        let tick_rate = Duration::from_millis(8);
+        let tick_rate = Duration::from_millis(16);
         let mut terminal = init_terminal()?;
         loop {
             terminal.draw(|f| ui(&mut app, f))?;
@@ -136,7 +131,7 @@ impl App {
                 if let Event::Key(key) = event::read()? {
                     match key.code {
                         KeyCode::Char('q') => break,
-                        KeyCode::Char('h') => app.problems.unselect(),
+                        // KeyCode::Char('h') => app.problems.unselect(),
                         KeyCode::Char('j') => app.problems.next(),
                         KeyCode::Char('k') => app.problems.previous(),
                         _ => {}
@@ -150,19 +145,19 @@ impl App {
         }
         restore_terminal()
     }
-    pub fn lorem_ipsum(&self) -> impl Widget {
-        let text = vec![
-            Line::from(format!("{}{}", "Lorem ipsum", "\u{25A0}")),
-            Line::from(format!("{}{}", "Lorem ipsum", "\u{25FC}")),
-            Line::from(format!("{}{}", "Lorem ipsum", "\u{2BC0}")),
-            Line::from(format!("{}{}", "Lorem ipsum", "\u{25FE}")),
-            Line::from(format!("{}{}", "Lorem ipsum", "\u{2B1B}")),
-            Line::from(format!("{}{}", "Lorem ipsum", "\u{20DE}")),
-            Line::from(format!("{}{}", "Lorem ipsum", "\u{2705}")),
-            Line::from(format!("{}{}", "Lorem ipsum", "\u{1FBB1}")),
-            Line::from(format!("{}{}", "Lorem ipsum", "\u{1FBC0}")),
-            Line::from(format!("{}{}", "Lorem ipsum", "\u{1FBC4}")),
-        ];
+    pub fn disp_problem_description(&self) -> impl Widget {
+        let text = match self.problems.state.selected() {
+            Some(i) => self
+                .problems
+                .items
+                .iter()
+                .nth(i)
+                .unwrap()
+                .description
+                .clone(),
+            None => "".to_owned(),
+        };
+
         Paragraph::new(text).block(
             Block::default()
                 .borders(Borders::ALL)
@@ -186,25 +181,33 @@ fn ui<B: Backend>(app: &mut App, f: &mut Frame<B>) {
         .problems
         .items
         .iter()
-        .map(|prob| {
+        .enumerate()
+        .map(|(ind, prob)| {
             let mut lines = vec![Line::from(prob.title.clone())];
             lines.push(prob.frontend_question_id.italic().into());
-            ListItem::new(lines).style(Style::default().fg(Color::Yellow).bg(Color::LightGreen))
+            // TODO: make the selected have more lines in it
+            match app.problems.state.selected() {
+                Some(i) if i == ind => {}
+                None => {}
+                _ => {}
+            }
+            ListItem::new(lines).style(Style::default().fg(Color::White).bg(Color::default()))
         })
         .collect();
     let list = List::new(items)
         .block(Block::default().borders(Borders::ALL).title("Problem List"))
         .highlight_style(
             Style::default()
-                .bg(Color::Blue)
+                .bg(Color::LightBlue)
+                .fg(Color::DarkGray)
                 .add_modifier(Modifier::BOLD),
         )
         .highlight_symbol(">> ");
 
-    let lorem_ipsum = app.lorem_ipsum();
+    let description = app.disp_problem_description();
 
     f.render_stateful_widget(list, chunks[0], &mut app.problems.state);
-    f.render_widget(lorem_ipsum, chunks[1]);
+    f.render_widget(description, chunks[1]);
 }
 
 fn init_terminal() -> io::Result<Terminal<CrosstermBackend<Stdout>>> {
