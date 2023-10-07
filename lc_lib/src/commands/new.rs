@@ -1,7 +1,8 @@
 use std::{io::Write, str::FromStr};
 
-
-use super::common::{GQL_ENDPOINT, SESSION, TOKEN, get_lc_dir};
+use super::common::{
+    generate_request_client, get_lc_dir, query_endpoint, GQL_ENDPOINT, SESSION, TOKEN,
+};
 use anyhow::Result;
 use regex::Regex;
 use reqwest::Url;
@@ -27,7 +28,7 @@ pub async fn run(link: &String) -> Result<()> {
     // and a capability to add more
 
     let query = serde_json::json!({"query":"\n    query questionEditorData($titleSlug: String!) {\n  question(titleSlug: $titleSlug) {\n    questionId\n    questionFrontendId\n    title\n    codeSnippets {\n      lang\n      langSlug\n      code\n    }\n    envInfo\n    enableRunCode\n    hasFrontendPreview\n    frontendPreviews\n  }\n}\n    ","variables":{"titleSlug":title_slug},"operationName":"questionEditorData"});
-    let data = query_endpoint(&GQL_ENDPOINT.to_string(), &query, &client).await?;
+    let data = query_endpoint(GQL_ENDPOINT.to_string(), query, client).await?;
 
     // parse the data into a single struct that can be converted to json and stored in the
     // repo itself
@@ -52,9 +53,9 @@ pub async fn run(link: &String) -> Result<()> {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Problem {
-    number: usize,
-    // is Some(a) when it DOES NOT match number
-    number_backend: Option<usize>,
+    frontend_question_id: usize,
+    // is Some(a) when it DOES NOT match frontend_question_id
+    backend_question_id: Option<usize>,
     snippet: String,
     title: String,
     link: String,
@@ -103,59 +104,6 @@ pub fn get_title_slug(link: &Url) -> Result<String> {
             "Failed to retrieve the title-slug from the link: {link}"
         ))),
     }
-}
-
-pub async fn query_endpoint(
-    endpoint: &String,
-    query: &serde_json::Value,
-    client: &reqwest::Client,
-) -> Result<serde_json::Value> {
-    //     .json(&serde_json::json!({
-    //         // replace two-sum with whatever question is in the link
-    //         // "query":"\n    query questionTitle($titleSlug: String!) {\n  question(titleSlug: $titleSlug) {\n    questionId\n    questionFrontendId\n    title\n    titleSlug\n  }\n}\n    ","variables":{"titleSlug":"two-sum"},"operationName":"questionTitle"
-    //         //
-    //         // below is how to get function signature and other code
-    //         // output["data"]["question"]["codeSnippets"][15]["code"] == code that is
-    //         // provided
-    //         // "query":"\n    query questionEditorData($titleSlug: String!) {\n  question(titleSlug: $titleSlug) {\n    questionId\n    questionFrontendId\n    codeSnippets {\n      lang\n      langSlug\n      code\n    }\n    envInfo\n    enableRunCode\n    hasFrontendPreview\n    frontendPreviews\n  }\n}\n    ","variables":{"titleSlug":"two-sum"},"operationName":"questionEditorData"
-    //         //
-    //         // submissions work
-    //         "lang":"rust","question_id":"1","typed_code":"impl Solution {\n    pub fn two_sum(nums: Vec<i32>, target: i32) -> Vec<i32> {\n        use std::collections::HashMap;\n        // hash each number with the index as their value\n        let mut hash: HashMap<i32, i32> = HashMap::new();\n        for (k, v) in nums.iter().zip(0..) {\n            match hash.get(&(target - k)) {\n                Some(i) => return vec![v, *i],\n                None => hash.insert(*k, v),\n            };\n        }\n        vec![]\n    }\n}"
-    //     }))
-    let resp: serde_json::Value = client
-        .post(endpoint)
-        .json(query)
-        .send()
-        .await?
-        .json()
-        .await?;
-    Ok(resp)
-}
-
-pub fn generate_request_client(sanitized_link: &Url) -> Result<reqwest::Client> {
-    use reqwest::header;
-    let cookies = format!("LEETCODE_SESSION={};csrftoken={}", SESSION, TOKEN);
-
-    let mut headers = header::HeaderMap::new();
-
-    let cookie = header::HeaderValue::from_str(cookies.as_str())?;
-    let referer = header::HeaderValue::from_str(sanitized_link.as_str())?;
-    let csrf = header::HeaderValue::from_str(TOKEN)?;
-    let content = header::HeaderValue::from_str("application/json")?;
-    let accept = header::HeaderValue::from_str("application/json")?;
-
-    headers.insert(header::COOKIE, cookie);
-    headers.insert(header::REFERER, referer);
-    headers.insert(header::CONTENT_TYPE, content);
-    headers.insert(header::ACCEPT, accept);
-    headers.insert(header::HeaderName::from_static("x-csrftoken"), csrf);
-
-    reqwest::Client::builder()
-        .user_agent("Mozilla/5.0 (X11; Linux x86_64; rv:109.0) Gecko/20100101 Firefox/117")
-        .default_headers(headers)
-        .cookie_store(true)
-        .build()
-        .map_err(|e| anyhow::Error::msg(e.to_string()))
 }
 
 pub fn parse_from_json_to_problem(json: serde_json::Value) -> Result<Problem> {
@@ -226,8 +174,8 @@ pub fn parse_from_json_to_problem(json: serde_json::Value) -> Result<Problem> {
         None => return Err(anyhow::Error::msg("Could not get the title from JSON")),
     };
     Ok(Problem {
-        number,
-        number_backend,
+        frontend_question_id: number,
+        backend_question_id: number_backend,
         snippet,
         title,
         link: "".to_owned(),
@@ -240,11 +188,13 @@ pub fn create_entry(prob: Problem) -> Result<()> {
     // first check if the problem exists already in the Cargo.toml
     let cargo_path = format!("{}{}", lc_dir, "/Cargo.toml");
     let cargo = std::fs::read_to_string(cargo_path.clone())?;
-    let re = Regex::new(format!(r#"\[\[bin\]\]\nname = \"{}\""#, prob.number).as_str()).unwrap();
+    let re =
+        Regex::new(format!(r#"\[\[bin\]\]\nname = \"{}\""#, prob.frontend_question_id).as_str())
+            .unwrap();
     if let Some(_a) = re.captures(cargo.as_str()) {
         return Err(anyhow::Error::msg(format!(
             "Problem already exists in repo! e: {}",
-            prob.number
+            prob.frontend_question_id
         )));
     } else {
         // write the bin into Cargo.toml
@@ -254,7 +204,7 @@ pub fn create_entry(prob: Problem) -> Result<()> {
             "{}",
             format!(
                 "\n[[bin]]\nname = \"{}\"\npath = \"src/{}/src/main.rs\"",
-                prob.number, prob.number
+                prob.frontend_question_id, prob.frontend_question_id
             )
         )?;
     }
@@ -283,24 +233,36 @@ pub fn create_entry(prob: Problem) -> Result<()> {
     let code = format!("{}{}{}", "struct Solution;\n\n", prob.snippet, main);
     let readme = format!(
         "# {}. {}\n\n[Here]({}) is the link to the problem.",
-        prob.number, prob.title, prob.link
+        prob.frontend_question_id, prob.title, prob.link
     );
 
     // then make the prob.number directory in src
-    std::fs::create_dir_all(format!("{}{}{}{}", lc_dir, "src/", prob.number, "/src/"))?;
+    std::fs::create_dir_all(format!(
+        "{}{}{}{}",
+        lc_dir, "src/", prob.frontend_question_id, "/src/"
+    ))?;
     // then make its write the code in main.rs
     std::fs::write(
-        format!("{}{}{}{}", lc_dir, "src/", prob.number, "/src/main.rs"),
+        format!(
+            "{}{}{}{}",
+            lc_dir, "src/", prob.frontend_question_id, "/src/main.rs"
+        ),
         code,
     )?;
     // README.md
     std::fs::write(
-        format!("{}{}{}{}", lc_dir, "src/", prob.number, "/README.md"),
+        format!(
+            "{}{}{}{}",
+            lc_dir, "src/", prob.frontend_question_id, "/README.md"
+        ),
         readme,
     )?;
     // TAGS
     std::fs::write(
-        format!("{}{}{}{}", lc_dir, "src/", prob.number, "/TAGS"),
+        format!(
+            "{}{}{}{}",
+            lc_dir, "src/", prob.frontend_question_id, "/TAGS"
+        ),
         "",
     )?;
     Ok(())

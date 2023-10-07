@@ -1,6 +1,11 @@
+use anyhow::Result;
+use lc_lib::common::{generate_request_client, query_endpoint, LeetCodeProblem, GQL_ENDPOINT};
+use serde_json::Value;
+use tokio::runtime::{self, Builder};
+
 use std::{
     io::{self, stdout, Stdout},
-    str::{self},
+    str::{self, FromStr},
     time::{Duration, Instant},
 };
 
@@ -10,6 +15,7 @@ use crossterm::{
     ExecutableCommand,
 };
 use ratatui::{prelude::*, widgets::*};
+use reqwest::Url;
 
 pub struct StatefulList<T> {
     state: ListState,
@@ -57,47 +63,69 @@ impl<T> StatefulList<T> {
     }
 }
 
-pub struct App<'a> {
-    items: StatefulList<(&'a str, usize)>,
+pub struct App {
+    /// `problems` will be either filled in from a local cache or fetched by
+    /// reqwest to update the cache.
+    /// The location for caching will be primarily "~/.cache/lc/".
+    problems: StatefulList<LeetCodeProblem>,
 }
 
-impl<'a> App<'a> {
-    pub fn new() -> App<'a> {
+fn parse_problems(json: serde_json::Value, count: usize) -> Vec<Result<LeetCodeProblem>> {
+    let list = &json["data"]["problemsetQuestionList"];
+    // let count = &json["data"]["problemsetQuestionList"]["questions"]
+    //     .as_array()
+    //     .unwrap()
+    //     .len();
+    let mut out = Vec::with_capacity(count);
+    for i in 0..count {
+        out.push(
+            serde_json::from_value::<LeetCodeProblem>(list["questions"][i].clone())
+                .map_err(|e| e.into()),
+        );
+    }
+    out
+}
+
+impl App {
+    pub fn new(rt: runtime::Runtime) -> App {
+        // upon startup new should first check the cache for existing problem info
+        // and if it cannot find anything, then it reaches out to the gql server.
+
+        // first query the server
+        // with the data that it returns iterate over the questions and generate a new
+        // `LeetCodeProblem` from each
+
+        let query = serde_json::json!({"query":"\n    query problemsetQuestionList($categorySlug: String, $limit: Int, $skip: Int, $filters: QuestionListFilterInput) {\n  problemsetQuestionList: questionList(\n    categorySlug: $categorySlug\n    limit: $limit\n    skip: $skip\n    filters: $filters\n  ) {\n    total: totalNum\n    questions: data {\n      acRate\n      difficulty\n      freqBar\n      frontendQuestionId: questionFrontendId\n      isFavor\n      paidOnly: isPaidOnly\n      status\n      title\n      titleSlug\n      topicTags {\n        name\n        id\n        slug\n      }\n      hasSolution\n      hasVideoSolution\n    }\n  }\n}\n    ","variables":{"categorySlug":"","skip":0,"limit":50,"filters":{}},"operationName":"problemsetQuestionList"});
+        let link = Url::from_str("https://leetcode.com/problems/all").unwrap();
+        let client = generate_request_client(&link).unwrap();
+        let handle = rt.spawn(query_endpoint(GQL_ENDPOINT.to_string(), query, client));
+        // let data = query_endpoint(&GQL_ENDPOINT.to_string(), &query, &client).await?;
+
+        // HERE: is where the cache checking could happen
+
+        let data = rt.block_on(handle).unwrap().unwrap();
+
+        // parse the data into a vec![LeetCodeProblem]
+        let problems = parse_problems(data, 50)
+            .into_iter()
+            .filter_map(Result::ok)
+            .collect();
+        // return the App { problems: vec![LeetCodeProblem] }
+
         App {
-            items: StatefulList::with_items(vec![
-                ("Item0", 1),
-                ("Item1", 2),
-                ("Item2", 1),
-                ("Item3", 3),
-                ("Item4", 1),
-                ("Item5", 4),
-                ("Item6", 1),
-                ("Item7", 3),
-                ("Item8", 1),
-                ("Item9", 6),
-                ("Item10", 1),
-                ("Item11", 3),
-                ("Item12", 1),
-                ("Item13", 2),
-                ("Item14", 1),
-                ("Item15", 1),
-                ("Item16", 4),
-                ("Item17", 1),
-                ("Item18", 5),
-                ("Item19", 4),
-                ("Item20", 1),
-                ("Item21", 2),
-                ("Item22", 1),
-                ("Item23", 3),
-                ("Item24", 1),
-            ]),
+            problems: StatefulList::with_items(problems),
         }
     }
-    
+
     pub fn on_tick(&mut self) {}
 
     pub fn run() -> io::Result<()> {
-        let mut app = App::new();
+        let rt = Builder::new_multi_thread()
+            .worker_threads(1)
+            .enable_all()
+            .build()
+            .unwrap();
+        let mut app = App::new(rt);
         let mut last_tick = Instant::now();
         let tick_rate = Duration::from_millis(8);
         let mut terminal = init_terminal()?;
@@ -108,9 +136,9 @@ impl<'a> App<'a> {
                 if let Event::Key(key) = event::read()? {
                     match key.code {
                         KeyCode::Char('q') => break,
-                        KeyCode::Char('h') => app.items.unselect(),
-                        KeyCode::Char('j') => app.items.next(),
-                        KeyCode::Char('k') => app.items.previous(),
+                        KeyCode::Char('h') => app.problems.unselect(),
+                        KeyCode::Char('j') => app.problems.next(),
+                        KeyCode::Char('k') => app.problems.previous(),
                         _ => {}
                     }
                 }
@@ -155,18 +183,12 @@ fn ui<B: Backend>(app: &mut App, f: &mut Frame<B>) {
         .split(f.size());
 
     let items: Vec<ListItem> = app
-        .items
+        .problems
         .items
         .iter()
-        .map(|(name, val)| {
-            let mut lines = vec![Line::from(*name)];
-            for _ in 0..*val {
-                lines.push(
-                    "Description of the problem or something, i don't really know"
-                        .italic()
-                        .into(),
-                );
-            }
+        .map(|prob| {
+            let mut lines = vec![Line::from(prob.title.clone())];
+            lines.push(prob.frontend_question_id.italic().into());
             ListItem::new(lines).style(Style::default().fg(Color::Yellow).bg(Color::LightGreen))
         })
         .collect();
@@ -181,7 +203,7 @@ fn ui<B: Backend>(app: &mut App, f: &mut Frame<B>) {
 
     let lorem_ipsum = app.lorem_ipsum();
 
-    f.render_stateful_widget(list, chunks[0], &mut app.items.state);
+    f.render_stateful_widget(list, chunks[0], &mut app.problems.state);
     f.render_widget(lorem_ipsum, chunks[1]);
 }
 

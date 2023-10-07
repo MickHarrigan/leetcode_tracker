@@ -1,7 +1,12 @@
 // common code goes here
 use anyhow::Result;
 use clap::{Parser, Subcommand};
+use reqwest::Url;
+use serde::{Deserialize, Serialize};
+use std::fmt;
 use std::{error::Error, fmt::Debug, io::Write, str::FromStr};
+
+use crate::tag::TagType;
 
 use super::search::SearchCommand;
 use super::tag::TagCommand;
@@ -11,6 +16,54 @@ pub const TOKEN: &str = "aYcsgdAMmffTwhkAEICVGvuj4eR1sZgvrrtCcb2g5LQXPZrXFyXmY7T
 pub const GQL_ENDPOINT: &str = "https://leetcode.com/graphql/";
 // const COOKIES: &str = format!("LEETCODE_SESSION={};csrftoken={}", SESSION, TOKEN)
 // let jar = reqwest::cookie::Jar::default();
+
+/// Structure containing all the necessary information for a single LeetCode Problem.
+/// This includes the title, link, status, difficulty, description, number(id), etc.
+#[derive(Debug, Deserialize)]
+pub struct LeetCodeProblem {
+    pub status: Option<ProblemStatus>,
+    pub difficulty: ProblemDifficulty,
+    #[serde(rename(deserialize = "frontendQuestionId"))]
+    pub frontend_question_id: String,
+    pub title: String,
+    #[serde(rename(deserialize = "titleSlug"))]
+    pub title_slug: String,
+    // #[serde(rename(deserialize = "topicTags"))]
+    #[serde(skip)]
+    pub tags: Vec<TagType>,
+    #[serde(skip)]
+    pub snippet: String,
+    #[serde(skip)]
+    pub description: String,
+    #[serde(skip)]
+    pub tests: String,
+    #[serde(rename(deserialize = "acRate"))]
+    pub acceptance_rate: f64,
+}
+
+#[derive(Debug, Deserialize)]
+pub enum ProblemStatus {
+    #[serde(rename = "ac")]
+    Accepted,
+    #[serde(rename = "notac")]
+    Attempted,
+}
+impl fmt::Display for ProblemStatus {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match *self {
+            ProblemStatus::Accepted => write!(f, "\u{1FBB1}"),
+            ProblemStatus::Attempted => write!(f, "\u{1FBC0}"),
+            // ProblemStatus::NotAttempted => write!(f, "\u{1FBC4}"),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub enum ProblemDifficulty {
+    Easy,
+    Medium,
+    Hard,
+}
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -75,4 +128,57 @@ pub fn get_lc_dir() -> Result<String> {
     let key = "LEETCODE_DIR";
     // val is the top level directory for the leetcode directory
     env::var(key).map_err(|e| e.into())
+}
+
+pub async fn query_endpoint(
+    endpoint: String,
+    query: serde_json::Value,
+    client: reqwest::Client,
+) -> Result<serde_json::Value> {
+    //     .json(&serde_json::json!({
+    //         // replace two-sum with whatever question is in the link
+    //         // "query":"\n    query questionTitle($titleSlug: String!) {\n  question(titleSlug: $titleSlug) {\n    questionId\n    questionFrontendId\n    title\n    titleSlug\n  }\n}\n    ","variables":{"titleSlug":"two-sum"},"operationName":"questionTitle"
+    //         //
+    //         // below is how to get function signature and other code
+    //         // output["data"]["question"]["codeSnippets"][15]["code"] == code that is
+    //         // provided
+    //         // "query":"\n    query questionEditorData($titleSlug: String!) {\n  question(titleSlug: $titleSlug) {\n    questionId\n    questionFrontendId\n    codeSnippets {\n      lang\n      langSlug\n      code\n    }\n    envInfo\n    enableRunCode\n    hasFrontendPreview\n    frontendPreviews\n  }\n}\n    ","variables":{"titleSlug":"two-sum"},"operationName":"questionEditorData"
+    //         //
+    //         // submissions work
+    //         "lang":"rust","question_id":"1","typed_code":"impl Solution {\n    pub fn two_sum(nums: Vec<i32>, target: i32) -> Vec<i32> {\n        use std::collections::HashMap;\n        // hash each number with the index as their value\n        let mut hash: HashMap<i32, i32> = HashMap::new();\n        for (k, v) in nums.iter().zip(0..) {\n            match hash.get(&(target - k)) {\n                Some(i) => return vec![v, *i],\n                None => hash.insert(*k, v),\n            };\n        }\n        vec![]\n    }\n}"
+    //     }))
+    Ok(client
+        .post(endpoint)
+        .json(&query)
+        .send()
+        .await?
+        .json()
+        .await?)
+    // Ok(&resp)
+}
+
+pub fn generate_request_client(sanitized_link: &Url) -> Result<reqwest::Client> {
+    use reqwest::header;
+    let cookies = format!("LEETCODE_SESSION={};csrftoken={}", SESSION, TOKEN);
+
+    let mut headers = header::HeaderMap::new();
+
+    let cookie = header::HeaderValue::from_str(cookies.as_str())?;
+    let referer = header::HeaderValue::from_str(sanitized_link.as_str())?;
+    let csrf = header::HeaderValue::from_str(TOKEN)?;
+    let content = header::HeaderValue::from_str("application/json")?;
+    let accept = header::HeaderValue::from_str("application/json")?;
+
+    headers.insert(header::COOKIE, cookie);
+    headers.insert(header::REFERER, referer);
+    headers.insert(header::CONTENT_TYPE, content);
+    headers.insert(header::ACCEPT, accept);
+    headers.insert(header::HeaderName::from_static("x-csrftoken"), csrf);
+
+    reqwest::Client::builder()
+        .user_agent("Mozilla/5.0 (X11; Linux x86_64; rv:109.0) Gecko/20100101 Firefox/117")
+        .default_headers(headers)
+        .cookie_store(true)
+        .build()
+        .map_err(|e| anyhow::Error::msg(e.to_string()))
 }

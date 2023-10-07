@@ -1,4 +1,5 @@
 use anyhow::Result;
+use serde::Deserialize;
 use clap::{Parser, ValueEnum};
 use regex::Regex;
 use std::io::Write;
@@ -6,7 +7,7 @@ use strum::{EnumIter, EnumString, IntoEnumIterator, IntoStaticStr};
 
 use super::common::{get_lc_dir, prompt_for_input};
 
-#[derive(Debug, Clone, Parser, EnumString, IntoStaticStr, EnumIter)]
+#[derive(Debug, Clone, Parser, EnumString, IntoStaticStr, EnumIter, Deserialize)]
 pub enum TagType {
     // #[strum(serialize = "stack", serialize = "<other name>")]
     #[strum(serialize = "stack", ascii_case_insensitive)]

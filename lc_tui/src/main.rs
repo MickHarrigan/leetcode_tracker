@@ -1,5 +1,3 @@
-use lc_lib;
-
 mod app;
 use app::*;
 
