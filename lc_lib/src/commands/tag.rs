@@ -1,7 +1,7 @@
 use anyhow::Result;
-use serde::Deserialize;
 use clap::{Parser, ValueEnum};
 use regex::Regex;
+use serde::Deserialize;
 use std::io::Write;
 use strum::{EnumIter, EnumString, IntoEnumIterator, IntoStaticStr};
 
