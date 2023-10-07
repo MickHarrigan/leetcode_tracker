@@ -82,6 +82,40 @@ fn parse_problems(json: serde_json::Value, count: usize) -> Vec<Result<LeetCodeP
     out
 }
 
+/// This takes a problem and updates the description, code snippet, and maybe tests
+fn update_problem(prob: &mut LeetCodeProblem, json: serde_json::Value) {
+    // clean up the json,
+    // get the description as raw
+    // get the code as raw
+    // update the prob
+    println!("{}", json);
+    match json
+        .get("data")
+        .and_then(|val| val.get("question"))
+        .and_then(|val| val.get("codeSnippets"))
+        .and_then(|val| {
+            val.as_array().and_then(|list| {
+                list.iter()
+                    .find(|snip| {
+                        snip.get("langSlug").and_then(|lang| lang.as_str()) == Some("rust")
+                    })
+                    .and_then(|snippet| snippet.get("code").and_then(|code| code.as_str()))
+            })
+        }) {
+        Some(snip) => prob.snippet = snip.to_owned(),
+        None => prob.snippet = "".to_owned(),
+    };
+    match json
+        .get("data")
+        .and_then(|val| val.get("question"))
+        .and_then(|val| val.get("content"))
+        .and_then(|cont| cont.as_str())
+    {
+        Some(cont) => prob.description = cont.to_owned(),
+        None => prob.description = "".to_owned(),
+    };
+}
+
 impl App {
     pub fn new(rt: runtime::Runtime) -> App {
         // upon startup new should first check the cache for existing problem info
@@ -91,21 +125,85 @@ impl App {
         // with the data that it returns iterate over the questions and generate a new
         // `LeetCodeProblem` from each
 
-        let query = serde_json::json!({"query":"\n    query problemsetQuestionList($categorySlug: String, $limit: Int, $skip: Int, $filters: QuestionListFilterInput) {\n  problemsetQuestionList: questionList(\n    categorySlug: $categorySlug\n    limit: $limit\n    skip: $skip\n    filters: $filters\n  ) {\n    total: totalNum\n    questions: data {\n      acRate\n      difficulty\n      freqBar\n      frontendQuestionId: questionFrontendId\n      isFavor\n      paidOnly: isPaidOnly\n      status\n      title\n      titleSlug\n      topicTags {\n        name\n        id\n        slug\n      }\n      hasSolution\n      hasVideoSolution\n    }\n  }\n}\n    ","variables":{"categorySlug":"","skip":0,"limit":50,"filters":{}},"operationName":"problemsetQuestionList"});
+        let query = serde_json::json!({
+            "query":"query problemsetQuestionList($categorySlug: String, $limit: Int, $skip: Int, $filters: QuestionListFilterInput) {
+                problemsetQuestionList: questionList(
+                    categorySlug: $categorySlug
+                    limit: $limit
+                    skip: $skip
+                    filters: $filters
+                    ) {
+                        total: totalNum
+                        questions: data {
+                            acRate
+                            difficulty
+                            frontendQuestionId: questionFrontendId
+                            status
+                            title
+                            titleSlug
+                            topicTags {
+                                name
+                                id
+                                slug
+                            }
+                        }
+                }
+            }",
+            "variables":{"categorySlug":"","skip":0,"limit":50,"filters":{}},
+            "operationName":"problemsetQuestionList"
+        });
         let link = Url::from_str("https://leetcode.com/problems/all").unwrap();
         let client = generate_request_client(&link).unwrap();
-        let handle = rt.spawn(query_endpoint(GQL_ENDPOINT.to_string(), query, client));
+        let handle = rt.spawn(query_endpoint(
+            GQL_ENDPOINT.to_string(),
+            query,
+            client.clone(),
+        ));
 
         // HERE: is where the cache checking could happen
 
         let data = rt.block_on(handle).unwrap().unwrap();
 
-        // parse the data into a vec![LeetCodeProblem]
-        // 50 is the amount of problems to read in at one time
-        let problems = parse_problems(data, 50)
+        // this is where the filling of the descriptions and code can occur
+        let mut problems: Vec<LeetCodeProblem> = parse_problems(data, 50)
             .into_iter()
             .filter_map(Result::ok)
             .collect();
+
+        let mut handles = Vec::with_capacity(10);
+
+        for i in 0..10 {
+            let slug = problems[i].title_slug.clone();
+            let query = serde_json::json!({
+                "query": "query questionContent($titleSlug: String!) {
+                    question(titleSlug: $titleSlug) {
+                        content
+                        codeSnippets {
+                            langSlug
+                            code
+                        }
+                    }
+                }",
+                "variables":{"titleSlug":slug},
+                "operationName":"questionContent"
+            });
+            handles.push((
+                i,
+                rt.spawn(query_endpoint(
+                    GQL_ENDPOINT.to_string(),
+                    query.clone(),
+                    client.clone(),
+                )),
+            ));
+        }
+
+        for (ind, handle) in handles {
+            let data = rt.block_on(handle).unwrap().unwrap();
+            update_problem(&mut problems[ind], data);
+        }
+
+        // parse the data into a vec![LeetCodeProblem]
+        // 50 is the amount of problems to read in at one time
 
         App {
             problems: StatefulList::with_items(problems),
