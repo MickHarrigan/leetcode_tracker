@@ -47,13 +47,14 @@ pub enum ProblemStatus {
     Accepted,
     #[serde(rename = "notac")]
     Attempted,
+    NotAttempted,
 }
 impl fmt::Display for ProblemStatus {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match *self {
             ProblemStatus::Accepted => write!(f, "\u{1FBB1}"),
             ProblemStatus::Attempted => write!(f, "\u{1FBC0}"),
-            // ProblemStatus::NotAttempted => write!(f, "\u{1FBC4}"),
+            ProblemStatus::NotAttempted => write!(f, "\u{1FBC4}"),
         }
     }
 }

@@ -17,3 +17,6 @@ serde = { workspace = true, features = ["serde_derive", "derive"] }
 serde_json = { workspace = true }
 strum = { workspace = true, features = ["derive"] }
 tokio = { workspace = true, features = ["full"] }
+scraper = "0.17.1"
+ego-tree = "0.6.2"
+strfmt = "0.2.4"

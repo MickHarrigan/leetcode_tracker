@@ -5,6 +5,8 @@ pub use commands::*;
 mod tests {
     use std::str::FromStr;
 
+    use scraper::Html;
+
     use crate::common::{generate_request_client, GQL_ENDPOINT};
 
     #[test]
@@ -82,7 +84,6 @@ mod tests {
                 })
             });
         // println!("{:?}", s);
-        println!("{}", data);
         assert!(false);
     }
 }
