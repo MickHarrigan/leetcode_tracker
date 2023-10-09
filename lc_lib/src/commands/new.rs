@@ -1,7 +1,6 @@
 use std::{io::Write, str::FromStr};
 
-
-use super::common::{GQL_ENDPOINT, SESSION, TOKEN, get_lc_dir};
+use super::common::{get_lc_dir, GQL_ENDPOINT};
 use anyhow::Result;
 use regex::Regex;
 use reqwest::Url;
@@ -134,13 +133,19 @@ pub async fn query_endpoint(
 
 pub fn generate_request_client(sanitized_link: &Url) -> Result<reqwest::Client> {
     use reqwest::header;
-    let cookies = format!("LEETCODE_SESSION={};csrftoken={}", SESSION, TOKEN);
+    use std::env;
+    let key = "LEETCODE_SESSION";
+    let session = env::var(key)?;
+    let key = "LEETCODE_TOKEN";
+    let token = env::var(key)?;
+
+    let cookies = format!("LEETCODE_SESSION={};csrftoken={}", session, token);
 
     let mut headers = header::HeaderMap::new();
 
     let cookie = header::HeaderValue::from_str(cookies.as_str())?;
     let referer = header::HeaderValue::from_str(sanitized_link.as_str())?;
-    let csrf = header::HeaderValue::from_str(TOKEN)?;
+    let csrf = header::HeaderValue::from_str(&token)?;
     let content = header::HeaderValue::from_str("application/json")?;
     let accept = header::HeaderValue::from_str("application/json")?;
 
