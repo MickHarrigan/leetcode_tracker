@@ -145,8 +145,6 @@ pub fn condense_tree_helper_preformatted<'a>(
             Node::Element(element) => {
                 let wrapper = parent_style.clone() + style_from_name(element.name());
                 curr.spans.extend(condense_tree_helper(&child, wrapper));
-                // let wrapper = parent_style.clone() + style_from_name(element.name());
-                // out.extend(condense_tree_helper_preformatted(&child, wrapper))
             }
             _ => {}
         }
@@ -276,6 +274,7 @@ fn update_problem(prob: &mut LeetCodeProblem, json: serde_json::Value) {
 
 fn sanitize_html(contents: String) -> Text<'static> {
     // iterate across the string and find each tag to convert
+    let contents = contents.replace("\t", "");
     let frag = Html::parse_fragment(contents.as_str());
 
     let root = match frag.tree.root().children().next() {
