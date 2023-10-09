@@ -24,6 +24,7 @@ use reqwest::Url;
 pub struct StyleWrapper {
     pub modifier: Option<Modifier>,
     pub format: Option<String>,
+    pub name: Option<String>,
 }
 
 impl std::ops::Add for StyleWrapper {
@@ -32,6 +33,7 @@ impl std::ops::Add for StyleWrapper {
         let mut out = StyleWrapper {
             format: None,
             modifier: None,
+            name: None,
         };
         match (self.modifier, rhs.modifier) {
             (Some(parent), Some(child)) => out.modifier = Some(child | parent),
@@ -73,22 +75,38 @@ fn style_from_name(name: &str) -> StyleWrapper {
         "strong" => StyleWrapper {
             modifier: Some(Modifier::BOLD),
             format: None,
+            name: Some("strong".to_string()),
         },
         "code" => StyleWrapper {
-            modifier: None,
-            format: Some("`{cont}`".to_string()),
+            modifier: Some(Modifier::ITALIC),
+            // format: Some("`{cont}`".to_string()),
+            format: None,
+            name: Some("code".to_string()),
         },
         "li" => StyleWrapper {
             modifier: None,
-            format: Some("    \u{2022} {cont}".to_string()),
+            format: None,
+            name: Some("li".to_string()),
+        },
+        "ul" => StyleWrapper {
+            modifier: None,
+            format: None,
+            name: Some("ul".to_string()),
         },
         "em" => StyleWrapper {
-            modifier: Some(Modifier::ITALIC),
+            modifier: Some(Modifier::UNDERLINED),
             format: None,
+            name: Some("em".to_string()),
+        },
+        "sup" => StyleWrapper {
+            modifier: None,
+            format: Some("^{cont}".to_string()),
+            name: Some("em".to_string()),
         },
         _ => StyleWrapper {
             modifier: None,
             format: None,
+            name: None,
         },
     }
 }
@@ -100,7 +118,7 @@ pub fn condense_tree<'a>(root: &NodeRef<Node>) -> Text<'a> {
         match child.value() {
             // condense helper must create a vec of spans
             Node::Element(element) => {
-                if element.name() == "ul" || element.name() == "pre" {
+                if element.name() == "pre" || element.name() == "ul" {
                     // break each next section into lines at each \n
                     let wrapper = style_from_name(element.name());
                     text.lines
@@ -143,6 +161,7 @@ pub fn condense_tree_helper_preformatted<'a>(
                 None => {}
             },
             Node::Element(element) => {
+                // let wrapper = parent_style.clone() + style_from_name(element.name());
                 let wrapper = parent_style.clone() + style_from_name(element.name());
                 curr.spans.extend(condense_tree_helper(&child, wrapper));
             }
@@ -152,6 +171,20 @@ pub fn condense_tree_helper_preformatted<'a>(
     if curr != Line::default() {
         out.push(curr);
     }
+    let out: Vec<Line> = out
+        .into_iter()
+        .map(|line| {
+            if parent_style.name == Some("ul".to_string())
+                && line.spans.iter().nth(0) != Some(&Span::from("\n"))
+            {
+                [vec![Span::from("    \u{2022} ")], line.spans.clone()]
+                    .concat()
+                    .into()
+            } else {
+                line
+            }
+        })
+        .collect();
     out
 }
 
@@ -274,7 +307,10 @@ fn update_problem(prob: &mut LeetCodeProblem, json: serde_json::Value) {
 
 fn sanitize_html(contents: String) -> Text<'static> {
     // iterate across the string and find each tag to convert
+
+    // removing \t gets rid of tabs that cause issues while parsing
     let contents = contents.replace("\t", "");
+    let contents = contents.replace("&nbsp;", "");
     let frag = Html::parse_fragment(contents.as_str());
 
     let root = match frag.tree.root().children().next() {
@@ -330,6 +366,7 @@ impl App {
 
         // HERE: is where the cache checking could happen
 
+        // TODO: Error handling!!!
         let data = rt.block_on(handle).unwrap().unwrap();
 
         // this is where the filling of the descriptions and code can occur
