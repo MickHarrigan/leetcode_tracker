@@ -1,8 +1,6 @@
 use std::{io::Write, str::FromStr};
 
-use super::common::{
-    generate_request_client, get_lc_dir, query_endpoint, GQL_ENDPOINT, SESSION, TOKEN,
-};
+use super::common::{generate_request_client, get_lc_dir, query_endpoint, GQL_ENDPOINT};
 use anyhow::Result;
 use regex::Regex;
 use reqwest::Url;
@@ -105,7 +103,6 @@ pub fn get_title_slug(link: &Url) -> Result<String> {
         ))),
     }
 }
-
 pub fn parse_from_json_to_problem(json: serde_json::Value) -> Result<Problem> {
     // data should contain specifically
     // question number

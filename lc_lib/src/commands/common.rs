@@ -11,11 +11,7 @@ use crate::tag::TagType;
 use super::search::SearchCommand;
 use super::tag::TagCommand;
 
-pub const SESSION: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJfYXV0aF91c2VyX2lkIjoiMjcyOTYwMyIsIl9hdXRoX3VzZXJfYmFja2VuZCI6ImFsbGF1dGguYWNjb3VudC5hdXRoX2JhY2tlbmRzLkF1dGhlbnRpY2F0aW9uQmFja2VuZCIsIl9hdXRoX3VzZXJfaGFzaCI6IjlkMmI3NjMzMTJiMjAwNjAwNDE1NWM1ODI4NWUzM2M2MTQ2MDJmMzAiLCJpZCI6MjcyOTYwMywiZW1haWwiOiJtaGFycmlnYW4zMjhAZ21haWwuY29tIiwidXNlcm5hbWUiOiJtaGFycmlnMSIsInVzZXJfc2x1ZyI6Im1oYXJyaWcxIiwiYXZhdGFyIjoiaHR0cHM6Ly9zMy11cy13ZXN0LTEuYW1hem9uYXdzLmNvbS9zMy1sYy11cGxvYWQvYXNzZXRzL2RlZmF1bHRfYXZhdGFyLmpwZyIsInJlZnJlc2hlZF9hdCI6MTY5NTY4MTA2MywiaXAiOiI2Ny4xNjQuMTI1LjYwIiwiaWRlbnRpdHkiOiI2ZTUzMWYwNmJmM2ZjMjZmMzZiM2MyODg5NzhlOWZjNCIsInNlc3Npb25faWQiOjQ1OTg0Nzc1LCJfc2Vzc2lvbl9leHBpcnkiOjEyMDk2MDB9.hasC5lHN2_jFX3bUtjbgAjnI9UBGKhXhPxuFLS49fe4";
-pub const TOKEN: &str = "aYcsgdAMmffTwhkAEICVGvuj4eR1sZgvrrtCcb2g5LQXPZrXFyXmY7TuDecxYetZ";
 pub const GQL_ENDPOINT: &str = "https://leetcode.com/graphql/";
-// const COOKIES: &str = format!("LEETCODE_SESSION={};csrftoken={}", SESSION, TOKEN)
-// let jar = reqwest::cookie::Jar::default();
 
 /// Structure containing all the necessary information for a single LeetCode Problem.
 /// This includes the title, link, status, difficulty, description, number(id), etc.
