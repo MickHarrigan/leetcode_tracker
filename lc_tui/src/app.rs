@@ -80,7 +80,7 @@ fn style_from_name(name: &str) -> StyleWrapper {
         },
         "li" => StyleWrapper {
             modifier: None,
-            format: Some("\t* {cont}".to_string()),
+            format: Some("    \u{2022} {cont}".to_string()),
         },
         "em" => StyleWrapper {
             modifier: Some(Modifier::ITALIC),
@@ -100,7 +100,12 @@ pub fn condense_tree<'a>(root: &NodeRef<Node>) -> Text<'a> {
         match child.value() {
             // condense helper must create a vec of spans
             Node::Element(element) => {
-                if element.name() != "font" {
+                if element.name() == "ul" || element.name() == "pre" {
+                    // break each next section into lines at each \n
+                    let wrapper = style_from_name(element.name());
+                    text.lines
+                        .extend(condense_tree_helper_preformatted(&child, wrapper));
+                } else if element.name() != "font" {
                     let wrapper = style_from_name(element.name());
                     text.lines
                         .push(Line::from(condense_tree_helper(&child, wrapper)));
@@ -114,6 +119,42 @@ pub fn condense_tree<'a>(root: &NodeRef<Node>) -> Text<'a> {
     }
     // text.lines.push(line);
     text
+}
+
+pub fn condense_tree_helper_preformatted<'a>(
+    node: &NodeRef<Node>,
+    parent_style: StyleWrapper,
+) -> Vec<Line<'a>> {
+    // this only applies to the preformatted text areas such as <pre> and <ul>
+    let mut out: Vec<Line> = Vec::new();
+
+    let mut curr = Line::default();
+    for child in node.children() {
+        match child.value() {
+            Node::Text(words) => match words.text.chars().last() {
+                Some(a) if a == '\n' => {
+                    curr.spans.push(words.text.to_string().into());
+                    out.push(curr);
+                    curr = Line::default();
+                }
+                Some(a) => curr
+                    .spans
+                    .push(to_span(&parent_style, words.text.to_string())),
+                None => {}
+            },
+            Node::Element(element) => {
+                let wrapper = parent_style.clone() + style_from_name(element.name());
+                curr.spans.extend(condense_tree_helper(&child, wrapper));
+                // let wrapper = parent_style.clone() + style_from_name(element.name());
+                // out.extend(condense_tree_helper_preformatted(&child, wrapper))
+            }
+            _ => {}
+        }
+    }
+    if curr != Line::default() {
+        out.push(curr);
+    }
+    out
 }
 
 pub fn condense_tree_helper<'a>(node: &NodeRef<Node>, parent_style: StyleWrapper) -> Vec<Span<'a>> {
