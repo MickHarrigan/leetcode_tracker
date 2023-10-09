@@ -1,8 +1,6 @@
 use std::{io::Write, str::FromStr};
 
-use super::common::{
-    generate_request_client, get_lc_dir, query_endpoint, GQL_ENDPOINT, SESSION, TOKEN,
-};
+use super::common::{generate_request_client, get_lc_dir, query_endpoint, GQL_ENDPOINT};
 use anyhow::Result;
 use regex::Regex;
 use reqwest::Url;
