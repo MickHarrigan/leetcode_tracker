@@ -1,14 +1,10 @@
 use anyhow::Result;
-use ego_tree::NodeRef;
 use lc_lib::common::{generate_request_client, query_endpoint, LeetCodeProblem, GQL_ENDPOINT};
-use scraper::{Html, Node};
-use strfmt::strfmt;
 use tokio::runtime::{self, Builder};
 
 use std::{
-    collections::HashMap,
     io::{self, stdout, Stdout},
-    str::{self, FromStr},
+    str::FromStr,
     time::{Duration, Instant},
 };
 
@@ -20,192 +16,7 @@ use crossterm::{
 use ratatui::{prelude::*, widgets::*};
 use reqwest::Url;
 
-#[derive(Clone)]
-pub struct StyleWrapper {
-    pub modifier: Option<Modifier>,
-    pub format: Option<String>,
-    pub name: Option<String>,
-}
-
-impl std::ops::Add for StyleWrapper {
-    type Output = StyleWrapper;
-    fn add(self, rhs: Self) -> Self::Output {
-        let mut out = StyleWrapper {
-            format: None,
-            modifier: None,
-            name: None,
-        };
-        match (self.modifier, rhs.modifier) {
-            (Some(parent), Some(child)) => out.modifier = Some(child | parent),
-            (None, right) => out.modifier = right,
-            (left, None) => out.modifier = left,
-            // (None, None) => {}
-        };
-        let mut hash = HashMap::new();
-        match (self.format, rhs.format) {
-            (Some(parent), Some(child)) => {
-                hash.insert("cont".to_string(), child);
-                out.format = Some(strfmt(parent.as_str(), &hash).unwrap_or(parent));
-            }
-            (None, right) => out.format = right,
-            (left, None) => out.format = left,
-            // (None, None) => {}
-        };
-        out
-    }
-}
-
-pub fn to_span(wrapper: &StyleWrapper, s: String) -> Span<'static> {
-    let mut vars = HashMap::new();
-    vars.insert("cont".to_string(), s.clone());
-    // apply the style and format to s
-    match (wrapper.modifier, &wrapper.format) {
-        (Some(m), Some(f)) => Span::styled(
-            strfmt(&f, &vars).unwrap_or(s.clone()),
-            Style::default().add_modifier(m),
-        ),
-        (None, Some(f)) => Span::from(strfmt(&f, &vars).unwrap_or(s.clone())),
-        (Some(m), None) => Span::styled(s.clone(), Style::default().add_modifier(m)),
-        (None, None) => Span::from(s.clone()),
-    }
-}
-
-fn style_from_name(name: &str) -> StyleWrapper {
-    match name {
-        "strong" => StyleWrapper {
-            modifier: Some(Modifier::BOLD),
-            format: None,
-            name: Some("strong".to_string()),
-        },
-        "code" => StyleWrapper {
-            modifier: Some(Modifier::ITALIC),
-            // format: Some("`{cont}`".to_string()),
-            format: None,
-            name: Some("code".to_string()),
-        },
-        "li" => StyleWrapper {
-            modifier: None,
-            format: None,
-            name: Some("li".to_string()),
-        },
-        "ul" => StyleWrapper {
-            modifier: None,
-            format: None,
-            name: Some("ul".to_string()),
-        },
-        "em" => StyleWrapper {
-            modifier: Some(Modifier::UNDERLINED),
-            format: None,
-            name: Some("em".to_string()),
-        },
-        "sup" => StyleWrapper {
-            modifier: None,
-            format: Some("^{cont}".to_string()),
-            name: Some("em".to_string()),
-        },
-        _ => StyleWrapper {
-            modifier: None,
-            format: None,
-            name: None,
-        },
-    }
-}
-
-pub fn condense_tree<'a>(root: &NodeRef<Node>) -> Text<'a> {
-    // given a root, collect all children into a text that is passed upwards
-    let mut text = Text::default();
-    for child in root.children() {
-        match child.value() {
-            // condense helper must create a vec of spans
-            Node::Element(element) => {
-                if element.name() == "pre" || element.name() == "ul" {
-                    // break each next section into lines at each \n
-                    let wrapper = style_from_name(element.name());
-                    text.lines
-                        .extend(condense_tree_helper_preformatted(&child, wrapper));
-                } else if element.name() != "font" {
-                    let wrapper = style_from_name(element.name());
-                    text.lines
-                        .push(Line::from(condense_tree_helper(&child, wrapper)));
-                }
-            }
-            Node::Text(words) => {
-                text.lines.push(Line::from(words.text.to_string()));
-            }
-            _ => {}
-        }
-    }
-    // text.lines.push(line);
-    text
-}
-
-pub fn condense_tree_helper_preformatted<'a>(
-    node: &NodeRef<Node>,
-    parent_style: StyleWrapper,
-) -> Vec<Line<'a>> {
-    // this only applies to the preformatted text areas such as <pre> and <ul>
-    let mut out: Vec<Line> = Vec::new();
-
-    let mut curr = Line::default();
-    for child in node.children() {
-        match child.value() {
-            Node::Text(words) => match words.text.chars().last() {
-                Some(a) if a == '\n' => {
-                    curr.spans.push(words.text.to_string().into());
-                    out.push(curr);
-                    curr = Line::default();
-                }
-                Some(a) => curr
-                    .spans
-                    .push(to_span(&parent_style, words.text.to_string())),
-                None => {}
-            },
-            Node::Element(element) => {
-                // let wrapper = parent_style.clone() + style_from_name(element.name());
-                let wrapper = parent_style.clone() + style_from_name(element.name());
-                curr.spans.extend(condense_tree_helper(&child, wrapper));
-            }
-            _ => {}
-        }
-    }
-    if curr != Line::default() {
-        out.push(curr);
-    }
-    let out: Vec<Line> = out
-        .into_iter()
-        .map(|line| {
-            if parent_style.name == Some("ul".to_string())
-                && line.spans.iter().nth(0) != Some(&Span::from("\n"))
-            {
-                [vec![Span::from("    \u{2022} ")], line.spans.clone()]
-                    .concat()
-                    .into()
-            } else {
-                line
-            }
-        })
-        .collect();
-    out
-}
-
-pub fn condense_tree_helper<'a>(node: &NodeRef<Node>, parent_style: StyleWrapper) -> Vec<Span<'a>> {
-    // given a header element, iterates across each text element and collects them into a vector
-    // that can be turned into a line at the caller
-    let mut out: Vec<Span> = Vec::new();
-    // iterate across the children and add them in
-    for child in node.children() {
-        match child.value() {
-            Node::Element(element) => {
-                let wrapper = parent_style.clone() + style_from_name(element.name());
-                out.extend(condense_tree_helper(&child, wrapper));
-            }
-            Node::Text(words) => out.push(to_span(&parent_style, words.text.to_string())),
-            _ => {}
-        }
-    }
-
-    out
-}
+use crate::ui::sanitize_html;
 
 pub struct StatefulList<T> {
     state: ListState,
@@ -303,21 +114,6 @@ fn update_problem(prob: &mut LeetCodeProblem, json: serde_json::Value) {
         Some(cont) => prob.description = cont.to_owned(),
         None => prob.description = "".to_owned(),
     };
-}
-
-fn sanitize_html(contents: String) -> Text<'static> {
-    // iterate across the string and find each tag to convert
-
-    // removing \t gets rid of tabs that cause issues while parsing
-    let contents = contents.replace("\t", "");
-    let contents = contents.replace("&nbsp;", "");
-    let frag = Html::parse_fragment(contents.as_str());
-
-    let root = match frag.tree.root().children().next() {
-        Some(a) => a,
-        None => panic!("Incorrect HTML Passed!"),
-    };
-    condense_tree(&root)
 }
 
 impl App {
