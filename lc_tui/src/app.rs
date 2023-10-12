@@ -1,5 +1,12 @@
 use anyhow::Result;
 use lc_lib::common::{generate_request_client, query_endpoint, LeetCodeProblem, GQL_ENDPOINT};
+use syntect::{
+    easy::HighlightLines,
+    highlighting::{Theme, ThemeSet},
+    parsing::{SyntaxReference, SyntaxSet},
+    util::LinesWithEndings,
+};
+use syntect_tui::into_span;
 use tokio::runtime::{self, Builder};
 
 use std::{
@@ -13,7 +20,10 @@ use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
     ExecutableCommand,
 };
-use ratatui::{prelude::*, widgets::*};
+use ratatui::{
+    prelude::*,
+    widgets::{canvas::Canvas, *},
+};
 use reqwest::Url;
 
 use crate::ui::sanitize_html;
@@ -69,6 +79,8 @@ pub struct App {
     /// reqwest to update the cache.
     /// The location for caching will be primarily "~/.cache/lc/".
     problems: StatefulList<LeetCodeProblem>,
+    ps: SyntaxSet,
+    ts: ThemeSet,
 }
 
 fn parse_problems(json: serde_json::Value, count: usize) -> Vec<Result<LeetCodeProblem>> {
@@ -208,6 +220,8 @@ impl App {
 
         App {
             problems: StatefulList::with_items(problems),
+            ps: SyntaxSet::load_defaults_newlines(),
+            ts: ThemeSet::load_from_folder("/home/mick/Dev/Rust/themes").unwrap(),
         }
     }
 
@@ -244,7 +258,33 @@ impl App {
         }
         restore_terminal()
     }
-    pub fn disp_problem_description(&self) -> impl Widget {
+    pub fn disp_provided_code(&self) -> impl Widget + '_ {
+        let code = match self.problems.state.selected() {
+            Some(i) => self.problems.items.iter().nth(i).unwrap().snippet.clone(),
+            None => "".to_string(),
+        };
+        let syntax = self.ps.find_syntax_by_extension("rs").unwrap();
+        let theme = &self.ts.themes["Catppuccin-macchiato"];
+        let mut h = HighlightLines::new(syntax, &theme);
+        let mut text = Text::default();
+        for line in LinesWithEndings::from(&code).into_iter() {
+            let line_spans: Vec<Span> = h
+                .highlight_line(line, &self.ps)
+                .unwrap()
+                .into_iter()
+                .filter_map(|segment| into_span(segment).ok())
+                .map(|a| Span::styled(a.content.into_owned(), a.style))
+                .collect();
+            let rat_line = Line::from(line_spans);
+            text.lines.push(rat_line);
+        }
+        Paragraph::new(text).wrap(Wrap { trim: false }).block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title("Provided Code"),
+        )
+    }
+    pub fn disp_problem_description(&self) -> impl Widget + '_ {
         let text = match self.problems.state.selected() {
             Some(i) => self
                 .problems
@@ -268,10 +308,15 @@ impl App {
 }
 
 fn ui<B: Backend>(app: &mut App, f: &mut Frame<B>) {
-    let chunks = Layout::default()
+    let panels = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
         .split(f.size());
+
+    let right_panel = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+        .split(panels[1]);
 
     let items: Vec<ListItem> = app
         .problems
@@ -311,9 +356,11 @@ fn ui<B: Backend>(app: &mut App, f: &mut Frame<B>) {
         .highlight_symbol(">> ");
 
     let description = app.disp_problem_description();
+    let provided_code = app.disp_provided_code();
 
-    f.render_stateful_widget(list, chunks[0], &mut app.problems.state);
-    f.render_widget(description, chunks[1]);
+    f.render_widget(description, right_panel[0]);
+    f.render_widget(provided_code, right_panel[1]);
+    f.render_stateful_widget(list, panels[0], &mut app.problems.state);
 }
 
 fn init_terminal() -> io::Result<Terminal<CrosstermBackend<Stdout>>> {
