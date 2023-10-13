@@ -79,20 +79,32 @@ pub struct App {
     /// reqwest to update the cache.
     /// The location for caching will be primarily "~/.cache/lc/".
     problems: StatefulList<LeetCodeProblem>,
+
+    // these are only required for the highlighting of the problems
+    // if these have to move then thats not a problem
     ps: SyntaxSet,
     ts: ThemeSet,
 }
 
-fn parse_problems(json: serde_json::Value, count: usize) -> Vec<Result<LeetCodeProblem>> {
-    let list = &json["data"]["problemsetQuestionList"];
-    let mut out = Vec::with_capacity(count);
-    for i in 0..count {
-        out.push(
-            serde_json::from_value::<LeetCodeProblem>(list["questions"][i].clone())
-                .map_err(|e| e.into()),
-        );
+fn parse_problems(json: &serde_json::Value, count: usize) -> Vec<Result<LeetCodeProblem>> {
+    // let list = &json["data"]["problemsetQuestionList"]["questions"];
+    match json
+        .get("data")
+        .and_then(|a| a.get("problemsetQuestionList"))
+        .and_then(|b| b.get("questions"))
+    {
+        Some(questions) => {
+            let mut out = Vec::with_capacity(count);
+            for i in 0..count {
+                out.push(parse_problem(&questions[i]));
+            }
+            out
+        }
+        None => vec![],
     }
-    out
+}
+fn parse_problem(problem_json: &serde_json::Value) -> Result<LeetCodeProblem> {
+    serde_json::from_value::<LeetCodeProblem>(problem_json.to_owned()).map_err(|e| e.into())
 }
 
 /// This takes a problem and updates the description, code snippet, and maybe tests
@@ -164,7 +176,29 @@ impl App {
             "variables":{"categorySlug":"","skip":0,"limit":50,"filters":{}},
             "operationName":"problemsetQuestionList"
         });
-        let link = Url::from_str("https://leetcode.com/problems/all").unwrap();
+        let query_of_the_day = serde_json::json!({
+            "query":"query questionOfToday {
+                activeDailyCodingChallengeQuestion {
+                    date
+                    question {
+                        acRate
+                        difficulty
+                        frontendQuestionId: questionFrontendId
+                        status
+                        title
+                        titleSlug
+                        topicTags {
+                            name
+                            id
+                            slug
+                        }
+                    }
+                }
+            }",
+            "variables":{},
+            "operationName":"questionOfToday"
+        });
+        let link = Url::from_str("https://leetcode.com/problemset/all").unwrap();
         let client = generate_request_client(&link).unwrap();
         let handle = rt.spawn(query_endpoint(
             GQL_ENDPOINT.to_string(),
@@ -178,15 +212,35 @@ impl App {
         let data = rt.block_on(handle).unwrap().unwrap();
 
         // this is where the filling of the descriptions and code can occur
-        let mut problems: Vec<LeetCodeProblem> = parse_problems(data, 50)
+        let mut problems: Vec<LeetCodeProblem> = parse_problems(&data, 50)
             .into_iter()
             .filter_map(Result::ok)
             .collect();
+        let handle_of_the_day = rt.spawn(query_endpoint(
+            GQL_ENDPOINT.to_string(),
+            query_of_the_day,
+            client.clone(),
+        ));
 
-        let mut handles = Vec::with_capacity(50);
+        let data_of_the_day = rt.block_on(handle_of_the_day).unwrap().unwrap();
+        // REPLACE ALL THE UNWRAPS
+        let problem_of_the_day = match data_of_the_day
+            .get("data")
+            .and_then(|a| a.get("activeDailyCodingChallengeQuestion"))
+            .and_then(|a| a.get("question"))
+        {
+            Some(problem) => parse_problem(problem),
+            None => Ok(LeetCodeProblem::default()),
+        };
+        let problem_of_the_day = problem_of_the_day.unwrap();
+        problems.insert(0, problem_of_the_day);
 
-        for i in 0..50 {
-            let slug = problems[i].title_slug.clone();
+        // now that the problem of the day is here, move it to the front
+
+        let mut handles = Vec::with_capacity(51);
+
+        for i in 0..51 {
+            let slug = &problems[i].title_slug;
             let query = serde_json::json!({
                 "query": "query questionContent($titleSlug: String!) {
                     question(titleSlug: $titleSlug) {
@@ -324,21 +378,41 @@ fn ui<B: Backend>(app: &mut App, f: &mut Frame<B>) {
         .iter()
         .enumerate()
         .map(|(ind, prob)| {
-            let mut lines = vec![Line::from(format!(
-                "{} | {}. {}",
-                match &app.problems.items[ind].status {
-                    Some(a) => a,
-                    None => &lc_lib::common::ProblemStatus::NotAttempted,
-                },
-                prob.frontend_question_id,
-                prob.title.clone()
-            ))];
+            let mut lines = vec![Line::from(vec![
+                Span::styled(
+                    format!(
+                        "{}",
+                        match &app.problems.items[ind].status {
+                            Some(a) => a,
+                            None => &lc_lib::common::ProblemStatus::NotAttempted,
+                        }
+                    ),
+                    Style::default().fg(match &app.problems.items[ind].status {
+                        Some(lc_lib::common::ProblemStatus::Accepted) => Color::Green,
+                        Some(lc_lib::common::ProblemStatus::Attempted) => Color::Magenta,
+                        _ => Color::Reset,
+                    }),
+                ),
+                Span::raw(" | "),
+                Span::styled(
+                    format!("{}. {}", prob.frontend_question_id, &prob.title),
+                    match &prob.difficulty {
+                        lc_lib::common::ProblemDifficulty::Easy => {
+                            Style::default().fg(Color::Green)
+                        }
+                        lc_lib::common::ProblemDifficulty::Medium => {
+                            Style::default().fg(Color::Yellow)
+                        }
+                        lc_lib::common::ProblemDifficulty::Hard => Style::default().fg(Color::Red),
+                    },
+                ),
+            ])];
             if ind == app.problems.state.selected().unwrap_or(0) {
                 // show the tags in a list
-                lines.push(Line::from("Empty for now! (Tags)"));
+                lines.push(Line::from("    Tags: "));
                 // show the acceptance rate
                 lines.push(Line::from(format!(
-                    "{}",
+                    "    Acceptance Rate: {:.2}%",
                     app.problems.items[ind].acceptance_rate
                 )));
             }
@@ -349,8 +423,7 @@ fn ui<B: Backend>(app: &mut App, f: &mut Frame<B>) {
         .block(Block::default().borders(Borders::ALL).title("Problem List"))
         .highlight_style(
             Style::default()
-                .bg(Color::LightBlue)
-                .fg(Color::DarkGray)
+                .bg(Color::DarkGray)
                 .add_modifier(Modifier::BOLD),
         )
         .highlight_symbol(">> ");

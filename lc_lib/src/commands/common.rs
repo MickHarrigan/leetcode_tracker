@@ -15,7 +15,7 @@ pub const GQL_ENDPOINT: &str = "https://leetcode.com/graphql/";
 
 /// Structure containing all the necessary information for a single LeetCode Problem.
 /// This includes the title, link, status, difficulty, description, number(id), etc.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Default)]
 pub struct LeetCodeProblem {
     pub status: Option<ProblemStatus>,
     pub difficulty: ProblemDifficulty,
@@ -49,14 +49,15 @@ impl fmt::Display for ProblemStatus {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match *self {
             ProblemStatus::Accepted => write!(f, "\u{1FBB1}"),
-            ProblemStatus::Attempted => write!(f, "\u{1FBC0}"),
-            ProblemStatus::NotAttempted => write!(f, "\u{1FBC4}"),
+            ProblemStatus::Attempted => write!(f, "\u{1FBC4}"),
+            ProblemStatus::NotAttempted => write!(f, " "),
         }
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Default)]
 pub enum ProblemDifficulty {
+    #[default]
     Easy,
     Medium,
     Hard,
@@ -151,7 +152,6 @@ pub async fn query_endpoint(
         .await?
         .json()
         .await?)
-    // Ok(&resp)
 }
 
 pub fn generate_request_client(sanitized_link: &Url) -> Result<reqwest::Client> {
@@ -162,7 +162,11 @@ pub fn generate_request_client(sanitized_link: &Url) -> Result<reqwest::Client> 
     let key = "LEETCODE_TOKEN";
     let token = env::var(key)?;
 
-    let cookies = format!("LEETCODE_SESSION={};csrftoken={}", session, token);
+    let cookies = format!(
+        "LEETCODE_SESSION={};csrftoken={}",
+        session.as_str(),
+        token.as_str()
+    );
 
     let mut headers = header::HeaderMap::new();
 

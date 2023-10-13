@@ -21,4 +21,4 @@ tokio = { workspace = true, features = ["full"] }
 image = "0.24.7"
 ratatui-image = { version = "0.3.0", features = ["crossterm"] }
 syntect = "5.1.0"
-syntect-tui = { git = "https://github.com/MickHarrigan/syntect-tui.git" }
+syntect-tui = "2.0.0"
