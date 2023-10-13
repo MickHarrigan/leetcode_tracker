@@ -1,5 +1,7 @@
 use anyhow::Result;
-use lc_lib::common::{generate_request_client, query_endpoint, LeetCodeProblem, GQL_ENDPOINT};
+use lc_lib::common::{
+    generate_request_client, get_lc_dir, query_endpoint, LeetCodeProblem, GQL_ENDPOINT,
+};
 use syntect::{
     easy::HighlightLines,
     highlighting::{Theme, ThemeSet},
@@ -10,7 +12,9 @@ use syntect_tui::into_span;
 use tokio::runtime::{self, Builder};
 
 use std::{
+    fs,
     io::{self, stdout, Stdout},
+    path::{Path, PathBuf},
     str::FromStr,
     time::{Duration, Instant},
 };
@@ -74,11 +78,35 @@ impl<T> StatefulList<T> {
     // }
 }
 
+pub struct CodeWindow {
+    // maybe a vec at a later time, if there is a need for 3 or more items
+    // titles: Vec<Option<String>>,
+    titles: (Option<String>, Option<String>),
+    index: usize,
+}
+impl CodeWindow {
+    pub fn alternate(&mut self) {
+        self.index = if self.index == 0 { 1 } else { 0 }
+    }
+    // pub fn increment(&mut self) {
+    //     // this should change to the next item in the tab list
+    //     self.index = if self.index == 0 { 1 } else { 0 }
+    // }
+    // pub fn decrement(&mut self) {
+    //     if self.index == 0 {
+    //         self.index = self.titles.len() - 1;
+    //     } else {
+    //         self.index -= 1;
+    //     }
+    // }
+}
+
 pub struct App {
     /// `problems` will be either filled in from a local cache or fetched by
     /// reqwest to update the cache.
     /// The location for caching will be primarily "~/.cache/lc/".
     problems: StatefulList<LeetCodeProblem>,
+    code_window: CodeWindow,
 
     // these are only required for the highlighting of the problems
     // if these have to move then thats not a problem
@@ -87,7 +115,6 @@ pub struct App {
 }
 
 fn parse_problems(json: &serde_json::Value, count: usize) -> Vec<Result<LeetCodeProblem>> {
-    // let list = &json["data"]["problemsetQuestionList"]["questions"];
     match json
         .get("data")
         .and_then(|a| a.get("problemsetQuestionList"))
@@ -274,6 +301,10 @@ impl App {
 
         App {
             problems: StatefulList::with_items(problems),
+            code_window: CodeWindow {
+                titles: (Some("Provided Code".to_string()), None),
+                index: 0,
+            },
             ps: SyntaxSet::load_defaults_newlines(),
             ts: ThemeSet::load_from_folder("/home/mick/Dev/Rust/themes").unwrap(),
         }
@@ -301,6 +332,8 @@ impl App {
                         // KeyCode::Char('h') => app.problems.unselect(),
                         KeyCode::Char('j') => app.problems.next(),
                         KeyCode::Char('k') => app.problems.previous(),
+                        KeyCode::Tab => app.code_window.alternate(),
+                        // KeyCode::Enter => edit::edit_file("file_path_in_repo").unwrap(),
                         _ => {}
                     }
                 }
@@ -313,25 +346,74 @@ impl App {
         restore_terminal()
     }
     pub fn disp_provided_code(&self) -> impl Widget + '_ {
-        let code = match self.problems.state.selected() {
-            Some(i) => self.problems.items.iter().nth(i).unwrap().snippet.clone(),
-            None => "".to_string(),
+        // if self.code_window.index == 0
+
+        let text = match self.code_window.index {
+            0 => {
+                let code = match self.problems.state.selected() {
+                    Some(i) => self.problems.items.iter().nth(i).unwrap().snippet.clone(),
+                    None => "".to_string(),
+                };
+                let syntax = self.ps.find_syntax_by_extension("rs").unwrap();
+                let theme = &self.ts.themes["Catppuccin-macchiato"];
+                let mut h = HighlightLines::new(syntax, &theme);
+                let mut text = Text::default();
+                for line in LinesWithEndings::from(&code).into_iter() {
+                    let line_spans: Vec<Span> = h
+                        .highlight_line(line, &self.ps)
+                        .unwrap()
+                        .into_iter()
+                        .filter_map(|segment| into_span(segment).ok())
+                        .map(|a| Span::styled(a.content.into_owned(), a.style))
+                        .collect();
+                    let rat_line = Line::from(line_spans);
+                    text.lines.push(rat_line);
+                }
+                text
+            }
+            1 => {
+                // read the file and show that contents
+                // check LEETCODE_DIR/src/<problem.frontend_question_id>/src/main.rs
+                // if the file exists then it shows something
+                // Otherwise it shouldn't even be able to have this tab
+                let problem_number = &self.problems.items
+                    [self.problems.state.selected().unwrap_or(0)]
+                .frontend_question_id;
+                let lc_dir = match get_lc_dir() {
+                    Ok(a) => a,
+                    Err(e) => panic!("{}", e),
+                };
+
+                let path = PathBuf::from(format!("{}src/{}/src/main.rs", lc_dir, problem_number));
+                if path.exists() {
+                    let code = match fs::read_to_string(path) {
+                        Ok(a) => a,
+                        Err(e) => panic!("{}", e),
+                    };
+
+                    let syntax = self.ps.find_syntax_by_extension("rs").unwrap();
+                    let theme = &self.ts.themes["Catppuccin-macchiato"];
+                    let mut h = HighlightLines::new(syntax, &theme);
+                    let mut text = Text::default();
+                    for line in LinesWithEndings::from(&code).into_iter() {
+                        let line_spans: Vec<Span> = h
+                            .highlight_line(line, &self.ps)
+                            .unwrap()
+                            .into_iter()
+                            .filter_map(|segment| into_span(segment).ok())
+                            .map(|a| Span::styled(a.content.into_owned(), a.style))
+                            .collect();
+                        let rat_line = Line::from(line_spans);
+                        text.lines.push(rat_line);
+                    }
+                    text
+                } else {
+                    Text::from("Problem has not yet been attempted!".to_string())
+                }
+            }
+            _ => unreachable!(),
         };
-        let syntax = self.ps.find_syntax_by_extension("rs").unwrap();
-        let theme = &self.ts.themes["Catppuccin-macchiato"];
-        let mut h = HighlightLines::new(syntax, &theme);
-        let mut text = Text::default();
-        for line in LinesWithEndings::from(&code).into_iter() {
-            let line_spans: Vec<Span> = h
-                .highlight_line(line, &self.ps)
-                .unwrap()
-                .into_iter()
-                .filter_map(|segment| into_span(segment).ok())
-                .map(|a| Span::styled(a.content.into_owned(), a.style))
-                .collect();
-            let rat_line = Line::from(line_spans);
-            text.lines.push(rat_line);
-        }
+        // if self.code_window.index == otherwise
         Paragraph::new(text).wrap(Wrap { trim: false }).block(
             Block::default()
                 .borders(Borders::ALL)
