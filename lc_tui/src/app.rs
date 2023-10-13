@@ -16,7 +16,7 @@ use std::{
 };
 
 use crossterm::{
-    event::{self, Event, KeyCode},
+    event::{self, Event, KeyCode, KeyEvent, KeyModifiers},
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
     ExecutableCommand,
 };
@@ -296,11 +296,32 @@ impl App {
             let timeout = tick_rate.saturating_sub(last_tick.elapsed());
             if event::poll(timeout)? {
                 if let Event::Key(key) = event::read()? {
-                    match key.code {
-                        KeyCode::Char('q') => break,
-                        // KeyCode::Char('h') => app.problems.unselect(),
-                        KeyCode::Char('j') => app.problems.next(),
-                        KeyCode::Char('k') => app.problems.previous(),
+                    match key {
+                        KeyEvent {
+                            code,
+                            // kind,
+                            modifiers,
+                            ..
+                        } if modifiers.is_empty() => match code {
+                            KeyCode::Char('q') => break,
+                            // KeyCode::Char('h') => app.problems.unselect(),
+                            KeyCode::Char('j') => app.problems.next(),
+                            KeyCode::Char('k') => app.problems.previous(),
+                            _ => {}
+                        },
+                        KeyEvent {
+                            code,
+                            // kind,
+                            modifiers,
+                            ..
+                        } if modifiers.contains(KeyModifiers::SHIFT) => {
+                            match code {
+                                KeyCode::Char('q') => break,
+                                KeyCode::Char('j') => app.problems.next(),
+                                KeyCode::Char('k') => app.problems.previous(),
+                                _ => {}
+                            };
+                        }
                         _ => {}
                     }
                 }
